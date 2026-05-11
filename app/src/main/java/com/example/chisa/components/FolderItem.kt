@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Row
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarBorder
@@ -27,7 +29,8 @@ import com.example.chisa.model.FolderItem
 @Composable
 fun FolderItem(
     folderItem: FolderItem,
-    onClick: () -> Unit = {}
+    onClick: () -> Unit = {},
+    onMoreClick: () -> Unit = {}
 ){
     Column(
         modifier = Modifier
@@ -46,19 +49,38 @@ fun FolderItem(
             Icon(
                 imageVector = if (folderItem.isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
                 contentDescription = "favorite",
-                tint = Color.White,
+                tint = if (folderItem.isFavorite) Color(0xFFFFE082) else Color.Gray,
                 modifier = Modifier
-                    .size(20.dp)
+                    .size(28.dp)
                     .align(Alignment.TopEnd) // 우상단에 배치
                     .padding(top = 8.dp, end = 4.dp)
             )
         }
         Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = folderItem.name,
-            fontSize = 12.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = folderItem.name,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = folderItem.date,
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = Color.Gray
+                )
+            }
+            Icon(
+                imageVector = Icons.Default.ExpandMore,
+                contentDescription = "more",
+                tint = Color(0xFF90CAF9),
+                modifier = Modifier
+                    .size(16.dp)
+                    .clickable { onMoreClick() }
+            )
+        }
     }
 }

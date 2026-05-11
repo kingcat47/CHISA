@@ -3,12 +3,14 @@ package com.example.chisa.components
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.FilePresent
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarBorder
@@ -27,7 +29,8 @@ import com.example.chisa.model.FileItem
 @Composable
 fun FileItem(
     fileItem: FileItem,
-    onClick: () -> Unit = {}
+    onClick: () -> Unit = {},
+    onMoreClick: () -> Unit = {}
 ){
     Column(
         modifier = Modifier
@@ -46,19 +49,38 @@ fun FileItem(
             Icon(
                 imageVector = if (fileItem.isFavorite) Icons.Filled.Star else Icons.Outlined.StarBorder,
                 contentDescription = "favorite",
-                tint = Color.White,
+                tint = if (fileItem.isFavorite) Color(0xFFFFE082) else Color.Gray,
                 modifier = Modifier
-                    .size(20.dp)
-                    .align(Alignment.TopEnd) // 우상단에 배치
+                    .size(28.dp)
+                    .align(Alignment.TopEnd)
                     .padding(top = 8.dp, end = 4.dp)
             )
         }
         Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = fileItem.name,
-            fontSize = 12.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = fileItem.name,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = fileItem.date,
+                    fontSize = 10.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = Color.Gray
+                )
+            }
+            Icon(
+                imageVector = Icons.Default.ExpandMore,
+                contentDescription = "more",
+                tint = Color(0xFF90CAF9),
+                modifier = Modifier
+                    .size(16.dp)
+                    .clickable { onMoreClick() }
+            )
+        }
     }
 }
