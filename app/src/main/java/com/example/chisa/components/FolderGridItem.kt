@@ -12,13 +12,11 @@ import com.example.chisa.model.GridItem
 fun FolderGridItem(
     items: List<GridItem>,
     modifier: Modifier = Modifier,
-    onFilterClick: () -> Unit = {},
     onAddClick: () -> Unit = {},
     onSortClick: () -> Unit = {}
 ) {
     Column(modifier = modifier) {
         FilterToolbar(
-            onFilterClick = onFilterClick,
             onAddClick = onAddClick,
             onSortClick = onSortClick
         )
