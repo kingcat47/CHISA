@@ -62,12 +62,14 @@ fun FileItem(
                 Text(
                     text = fileItem.name,
                     fontSize = 12.sp,
+                    lineHeight = 14.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     text = fileItem.date,
                     fontSize = 10.sp,
+                    lineHeight = 12.sp,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     color = Color.Gray
