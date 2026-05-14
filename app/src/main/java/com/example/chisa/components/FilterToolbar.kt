@@ -28,16 +28,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-
-enum class ContentFilter { ALL, FOLDER, FILE }
+import com.example.chisa.viewmodel.ContentFilter
 
 @Composable
 fun FilterToolbar(
+    selectedFilter: ContentFilter = ContentFilter.ALL,
+    onFilterChange: (ContentFilter) -> Unit = {},
     onAddClick: () -> Unit = {},
     onSortClick: () -> Unit = {}
 ) {
     var filterExpanded by remember { mutableStateOf(false) }
-    var selectedFilter by remember { mutableStateOf(ContentFilter.ALL) }
 
     val filterLabel = when (selectedFilter) {
         ContentFilter.ALL -> "모두"
@@ -65,9 +65,9 @@ fun FilterToolbar(
                 expanded = filterExpanded,
                 onDismiss = { filterExpanded = false },
                 items = listOf(
-                    DropdownItem("모두") { selectedFilter = ContentFilter.ALL },
-                    DropdownItem("폴더") { selectedFilter = ContentFilter.FOLDER },
-                    DropdownItem("파일") { selectedFilter = ContentFilter.FILE }
+                    DropdownItem("모두") { onFilterChange(ContentFilter.ALL) }, //람다함수 형태같음
+                    DropdownItem("폴더") { onFilterChange(ContentFilter.FOLDER) },
+                    DropdownItem("파일") { onFilterChange(ContentFilter.FILE) }
                 )
             )
         }
