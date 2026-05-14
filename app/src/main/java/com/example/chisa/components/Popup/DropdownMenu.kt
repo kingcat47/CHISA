@@ -1,5 +1,6 @@
 package com.example.chisa.components.Popup
 
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -7,8 +8,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
 data class DropdownItem(
@@ -33,7 +36,7 @@ fun MyDropdown(
     ) {
         items.forEachIndexed { index, item ->
             DropdownMenuItem(
-                text = { Text(item.label) },
+                text = { Text(item.label, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) },
                 leadingIcon = item.icon?.let { icon ->
                     { Icon(imageVector = icon, contentDescription = null) }
                 },
