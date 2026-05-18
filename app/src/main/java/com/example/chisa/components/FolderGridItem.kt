@@ -33,7 +33,8 @@ fun FolderGridItem(
     onFilterChange: (ContentFilter) -> Unit = {},
     selectedSort: SortOrder = SortOrder.DATE,
     onSortChange: (SortOrder) -> Unit = {},
-    onAddClick: () -> Unit = {}
+    onAddFolderClick: () -> Unit = {},
+    onAddFileClick: () -> Unit = {}
 ) {
     Column(modifier = modifier) {
 
@@ -43,7 +44,8 @@ fun FolderGridItem(
             onFilterChange = onFilterChange,
             selectedSort = selectedSort,
             onSortChange = onSortChange,
-            onAddClick = onAddClick
+            onAddFolderClick = onAddFolderClick,
+            onAddFileClick = onAddFileClick
         )
 
         // 아이템 그리드: 4열 고정
