@@ -22,23 +22,28 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             CHISATheme {
-                val viewModel: MainViewModel = viewModel() //뷰 모달 가져오기
-                val filteredItems by viewModel.filteredItems.collectAsState() //filterdItems값이 변경될때마다 체크하는거
-                val selectedFilter by viewModel.selectedFilter.collectAsState() // 위와 같은 원리로 필터(모두 폴더 파일)가 바뀌면 자동으로 반영
+                // ViewModel 인스턴스 획득 (Activity 생명주기에 바인딩)
+                val viewModel: MainViewModel = viewModel()
+
+                // 필터/정렬이 변경될 때마다 자동으로 UI 가 재구성되도록 상태 구독
+                val filteredItems  by viewModel.filteredItems.collectAsState()
+                val selectedFilter by viewModel.selectedFilter.collectAsState()
+                val selectedSort   by viewModel.selectedSort.collectAsState()
 
                 Scaffold(
                     modifier = Modifier.fillMaxSize(),
                     topBar = { ChisaTopBar() }
                 ) { innerPadding ->
                     FolderGridItem(
-                        items = filteredItems,
+                        items          = filteredItems,
                         selectedFilter = selectedFilter,
                         onFilterChange = { viewModel.setFilter(it) },
-                        modifier = Modifier.padding(innerPadding)
+                        selectedSort   = selectedSort,
+                        onSortChange   = { viewModel.setSort(it) },
+                        modifier       = Modifier.padding(innerPadding)
                     )
                 }
             }
         }
     }
 }
-
