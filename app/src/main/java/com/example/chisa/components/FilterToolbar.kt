@@ -57,13 +57,17 @@ fun FilterToolbar(
     onFilterChange: (ContentFilter) -> Unit = {},
     selectedSort: SortOrder = SortOrder.DATE,
     onSortChange: (SortOrder) -> Unit = {},
-    onAddClick: () -> Unit = {}
+    onAddFolderClick: () -> Unit = {},
+    onAddFileClick: () -> Unit = {}
 ) {
     // 필터 드롭다운 열림/닫힘 상태
     var filterExpanded by remember { mutableStateOf(false) }
 
     // 정렬 드롭다운 열림/닫힘 상태
     var sortExpanded by remember { mutableStateOf(false) }
+
+    // 신규 추가 드롭다운 열림/닫힘 상태 (폴더 / 파일 선택)
+    var addExpanded by remember { mutableStateOf(false) }
 
     // 현재 필터에 해당하는 표시 텍스트
     val filterLabel = when (selectedFilter) {
@@ -110,9 +114,9 @@ fun FilterToolbar(
         // ── 오른쪽: 신규 버튼 + 정렬 레이블 + 정렬 드롭다운 ─────────────────────
         Row(verticalAlignment = Alignment.CenterVertically) {
 
-            // 신규(+) 버튼
+            // 신규(+) 버튼 — 클릭 시 "폴더 / 파일" 선택 드롭다운 표시
             Button(
-                onClick = onAddClick,
+                onClick = { addExpanded = true },
                 shape = RoundedCornerShape(8.dp),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF374151))
@@ -125,6 +129,16 @@ fun FilterToolbar(
                 )
                 Text(text = "신규", fontSize = 13.sp, color = Color.White)
             }
+
+            // 신규 추가 드롭다운 — 폴더 추가 / 파일 추가 선택
+            MyDropdown(
+                expanded = addExpanded,
+                onDismiss = { addExpanded = false },
+                items = listOf(
+                    DropdownItem("폴더 추가") { onAddFolderClick() },
+                    DropdownItem("파일 추가") { onAddFileClick() }
+                )
+            )
 
             // 정렬 아이콘 버튼 — 클릭 시 정렬 드롭다운 표시
             IconButton(onClick = { sortExpanded = true }) {
