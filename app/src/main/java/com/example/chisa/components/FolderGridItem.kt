@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import com.example.chisa.model.FolderItem
 import com.example.chisa.model.GridItem
 import com.example.chisa.viewmodel.ContentFilter
 import com.example.chisa.viewmodel.SortOrder
@@ -23,7 +24,10 @@ import com.example.chisa.viewmodel.SortOrder
 //   onFilterChange : 필터 변경 시 ViewModel 에 전달할 콜백
 //   selectedSort   : 현재 선택된 정렬 기준
 //   onSortChange   : 정렬 변경 시 ViewModel 에 전달할 콜백
-//   onAddClick     : 신규 버튼 클릭 콜백
+//   onAddFolderClick : 폴더 생성 확인 시 (이름, 색상) 전달 콜백
+//   onAddFileClick   : 파일 불러오기 버튼 클릭 콜백
+//   onFolderClick    : 폴더 아이템 클릭 시 해당 FolderItem 전달 콜백
+//                      ViewModel.enterFolder() 와 연결해 폴더 진입을 처리한다.
 // ──────────────────────────────────────────────────────────────────────────────
 @Composable
 fun FolderGridItem(
@@ -34,7 +38,8 @@ fun FolderGridItem(
     selectedSort: SortOrder = SortOrder.DATE,
     onSortChange: (SortOrder) -> Unit = {},
     onAddFolderClick: (name: String, color: androidx.compose.ui.graphics.Color) -> Unit = { _, _ -> },
-    onAddFileClick: () -> Unit = {}
+    onAddFileClick: () -> Unit = {},
+    onFolderClick: (FolderItem) -> Unit = {}
 ) {
     Column(modifier = modifier) {
 
@@ -53,8 +58,11 @@ fun FolderGridItem(
         LazyVerticalGrid(columns = GridCells.Fixed(4)) {
             items(items) { gridItem ->
                 when (gridItem) {
-                    is GridItem.Folder -> FolderItem(folderItem = gridItem.item)
-                    is GridItem.File   -> FileItem(fileItem = gridItem.item)
+                    is GridItem.Folder -> FolderItem(
+                        folderItem = gridItem.item,
+                        onClick    = { onFolderClick(gridItem.item) }
+                    )
+                    is GridItem.File -> FileItem(fileItem = gridItem.item)
                 }
             }
         }

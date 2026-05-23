@@ -8,14 +8,19 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.chisa.mock.mockGridItems
 import com.example.chisa.model.FileItem
+import com.example.chisa.model.FolderItem
 import com.example.chisa.model.GridItem
+import java.io.File
 import com.example.chisa.util.colorForExtension
 import com.example.chisa.repository.StorageRepository
 import com.example.chisa.repository.StorageRepositoryImpl
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -80,6 +85,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _selectedSort = MutableStateFlow(SortOrder.DATE)
     val selectedSort: StateFlow<SortOrder> = _selectedSort.asStateFlow()
 
+    // ── 현재 탐색 경로 ────────────────────────────────────────────────────────
+    // 폴더를 진입할 때마다 리스트 끝에 추가(push), 뒤로갈 때 제거(pop)하는 스택 구조.
+    // 비어있으면 루트, lastOrNull()이 현재 위치한 폴더.
+    // ex) [Camera] → Camera 폴더 안 / [Camera, 2024] → Camera/2024 폴더 안
+    private val _currentPath = MutableStateFlow<List<FolderItem>>(emptyList())
+    val currentPath: StateFlow<List<FolderItem>> = _currentPath.asStateFlow()
+
+    // ── TopBar 타이틀 ─────────────────────────────────────────────────────────
+    // currentPath 가 바뀔 때마다 자동으로 갱신된다.
+    // UI 에서 직접 계산하지 않고 ViewModel 이 제공함으로써 MVVM 단방향 흐름을 유지한다.
+    val currentFolderName: StateFlow<String> = _currentPath
+        .map { path -> path.lastOrNull()?.name ?: "CHISA" }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, "CHISA")
+
+    // ── 뒤로가기 가능 여부 ────────────────────────────────────────────────────
+    // 루트(경로 비어있음)에서는 false → BackHandler 비활성화, TopBar 버튼 미표시
+    val canGoBack: StateFlow<Boolean> = _currentPath
+        .map { it.isNotEmpty() }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     // ── 최종 노출 목록 (필터 + 정렬 적용 결과) ────────────────────────────────
     private val _filteredItems = MutableStateFlow(allItems)
     val filteredItems: StateFlow<List<GridItem>> = _filteredItems.asStateFlow()
@@ -138,6 +163,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // ──────────────────────────────────────────────────────────────────────────
+    // enterFolder
+    //   폴더 클릭 시 호출. 경로 스택 끝에 해당 폴더를 추가하고 목록을 갱신한다.
+    //   applyFilterAndSort() 가 현재 경로를 기준으로 항목을 다시 계산한다.
+    //
+    //   @param folder  진입할 폴더 (FolderItem)
+    // ──────────────────────────────────────────────────────────────────────────
+    fun enterFolder(folder: FolderItem) {
+        _currentPath.value = _currentPath.value + folder  // 스택 push
+        applyFilterAndSort()
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // goBack
+    //   뒤로가기 시 호출. 경로 스택에서 마지막 항목을 제거해 이전 위치로 복귀한다.
+    //   루트(스택이 비어있음)에서는 아무 동작도 하지 않아 앱이 종료되지 않는다.
+    //   MainActivity 의 BackHandler 와 TopBar 뒤로가기 버튼 양쪽에서 호출된다.
+    // ──────────────────────────────────────────────────────────────────────────
+    fun goBack() {
+        if (_currentPath.value.isNotEmpty()) {
+            _currentPath.value = _currentPath.value.dropLast(1)  // 스택 pop
+            applyFilterAndSort()
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
     // createFolder
     //   Repository 를 통해 폴더를 생성하고 allItems 에 추가한다.
     //   추가 후 현재 필터/정렬 기준으로 목록을 재계산한다.
@@ -171,16 +221,47 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // ──────────────────────────────────────────────────────────────────────────
     // applyFilterAndSort (private)
-    //   1단계: 현재 필터로 원본 목록을 걸러낸다.
-    //   2단계: 현재 정렬 기준으로 결과를 정렬한다.
-    //   DATE  → 날짜 내림차순 (yyyy-MM-dd 문자열 비교 가능)
-    //   NAME  → 이름 오름차순 (한글 ㄱ→ㅎ, 영문 A→Z)
+    //   필터 → 정렬 순서로 목록을 재계산해 _filteredItems 에 반영한다.
+    //   상태(필터, 정렬, 현재 경로)가 바뀔 때마다 호출된다.
+    //
+    //   0단계: 현재 경로 기준으로 표시할 항목 범위 결정
+    //     - 루트: allItems 전체
+    //     - 폴더 안: 해당 폴더의 path 를 부모로 갖는 항목만 (File.parent 비교)
+    //   1단계: ContentFilter 로 폴더/파일 분류
+    //   2단계: SortOrder 로 정렬
+    //     DATE → 날짜 내림차순 (최신순)
+    //     NAME → 이름 오름차순 (ㄱ→ㅎ, A→Z)
     // ──────────────────────────────────────────────────────────────────────────
+    // ──────────────────────────────────────────────────────────────────────────
+    // itemsInCurrentFolder (private)
+    //   현재 경로 기준으로 표시할 항목 범위를 결정한다.
+    //   applyFilterAndSort() 의 0단계를 별도 함수로 분리해 단일 책임 원칙을 적용.
+    //
+    //   - 루트(경로 없음): allItems 전체 반환
+    //   - 폴더 안: 해당 폴더 path 를 부모로 갖는 직계 자식 항목만 반환
+    // ──────────────────────────────────────────────────────────────────────────
+    private fun itemsInCurrentFolder(): List<GridItem> {
+        val currentFolder = _currentPath.value.lastOrNull()
+            ?: return allItems  // 루트면 전체 반환
+
+        return allItems.filter { item ->
+            // 아이템의 상위 경로(parent)가 현재 폴더 경로와 일치하는 항목만 포함
+            val parentPath = when (item) {
+                is GridItem.Folder -> File(item.item.path).parent ?: ""
+                is GridItem.File   -> File(item.item.path).parent ?: ""
+            }
+            parentPath == currentFolder.path
+        }
+    }
+
     private fun applyFilterAndSort() {
+        // 0단계: 현재 경로 기준 항목 범위 결정 (루트 or 폴더 안)
+        val baseItems = itemsInCurrentFolder()
+
         val filtered = when (_selectedFilter.value) {
-            ContentFilter.ALL    -> allItems
-            ContentFilter.FOLDER -> allItems.filterIsInstance<GridItem.Folder>()
-            ContentFilter.FILE   -> allItems.filterIsInstance<GridItem.File>()
+            ContentFilter.ALL    -> baseItems
+            ContentFilter.FOLDER -> baseItems.filterIsInstance<GridItem.Folder>()
+            ContentFilter.FILE   -> baseItems.filterIsInstance<GridItem.File>()
         }
 
         _filteredItems.value = when (_selectedSort.value) {
@@ -188,6 +269,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             SortOrder.NAME -> filtered.sortedBy { it.sortName }
         }
     }
+
 }
 
 // ── 참고 ─────────────────────────────────────────────────────────────────────
