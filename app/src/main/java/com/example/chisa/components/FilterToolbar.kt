@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material3.Button
@@ -26,6 +28,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.chisa.components.Popup.CreateFolderDialog
+import com.example.chisa.components.Popup.Dialog
+import com.example.chisa.components.Popup.DialogOption
 import com.example.chisa.components.Popup.DropdownItem
 import com.example.chisa.components.Popup.MyDropdown
 import com.example.chisa.viewmodel.ContentFilter
@@ -57,7 +62,7 @@ fun FilterToolbar(
     onFilterChange: (ContentFilter) -> Unit = {},
     selectedSort: SortOrder = SortOrder.DATE,
     onSortChange: (SortOrder) -> Unit = {},
-    onAddFolderClick: () -> Unit = {},
+    onAddFolderClick: (name: String, color: Color) -> Unit = { _, _ -> },
     onAddFileClick: () -> Unit = {}
 ) {
     // 필터 드롭다운 열림/닫힘 상태
@@ -68,6 +73,9 @@ fun FilterToolbar(
 
     // 신규 추가 드롭다운 열림/닫힘 상태 (폴더 / 파일 선택)
     var addExpanded by remember { mutableStateOf(false) }
+
+    // 폴더 생성 다이얼로그 열림/닫힘 상태
+    var createFolderExpanded by remember { mutableStateOf(false) }
 
     // 현재 필터에 해당하는 표시 텍스트
     val filterLabel = when (selectedFilter) {
@@ -130,15 +138,35 @@ fun FilterToolbar(
                 Text(text = "신규", fontSize = 13.sp, color = Color.White)
             }
 
-            // 신규 추가 드롭다운 — 폴더 추가 / 파일 추가 선택
-            MyDropdown(
-                expanded = addExpanded,
-                onDismiss = { addExpanded = false },
-                items = listOf(
-                    DropdownItem("폴더 추가") { onAddFolderClick() },
-                    DropdownItem("파일 추가") { onAddFileClick() }
+            // 신규 추가 다이얼로그 — 폴더 생성 / 불러오기 선택
+            if (addExpanded) {
+                Dialog(
+                    onDismiss = { addExpanded = false },
+                    options = listOf(
+                        DialogOption(
+                            icon    = Icons.Default.CreateNewFolder,
+                            label   = "폴더 생성",
+                            onClick = { createFolderExpanded = true }
+                        ),
+                        DialogOption(
+                            icon    = Icons.Default.FileUpload,
+                            label   = "불러오기",
+                            onClick = { onAddFileClick() }
+                        )
+                    )
                 )
-            )
+            }
+
+            // 폴더 생성 다이얼로그
+            if (createFolderExpanded) {
+                CreateFolderDialog(
+                    onDismiss = { createFolderExpanded = false },
+                    onConfirm = { name, color ->
+                        onAddFolderClick(name, color)
+                        createFolderExpanded = false
+                    }
+                )
+            }
 
             // 정렬 아이콘 버튼 — 클릭 시 정렬 드롭다운 표시
             IconButton(onClick = { sortExpanded = true }) {

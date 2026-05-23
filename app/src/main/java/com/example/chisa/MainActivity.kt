@@ -77,7 +77,7 @@ class MainActivity : ComponentActivity() {
                                 onFilterChange = { viewModel.setFilter(it) },
                                 selectedSort   = selectedSort,
                                 onSortChange   = { viewModel.setSort(it) },
-                                onAddFolderClick = { /* 폴더 생성 UI는 추후 구현 */ },
+                                onAddFolderClick = { name, color -> viewModel.createFolder(name, color) },
                                 onAddFileClick   = { filePickerLauncher.launch(arrayOf("*/*")) },
                                 modifier       = Modifier.padding(innerPadding)
                             )

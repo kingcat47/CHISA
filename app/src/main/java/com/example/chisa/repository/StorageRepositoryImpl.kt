@@ -194,4 +194,31 @@ class StorageRepositoryImpl(private val context: Context) : StorageRepository {
     // ──────────────────────────────────────────────────────────────────────────
     private fun colorForName(name: String): Color =
         colorPalette[abs(name.hashCode()) % colorPalette.size]
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // createFolder
+    //   앱 내부 저장소(filesDir)에 실제 디렉토리를 생성하고 GridItem.Folder 로 반환한다.
+    //   외부 저장소는 Android 10 이후 별도 권한이 필요하므로 앱 전용 디렉토리를 사용한다.
+    //
+    //   @param name   폴더 이름
+    //   @param color  사용자가 선택한 폴더 색상
+    // ──────────────────────────────────────────────────────────────────────────
+    override suspend fun createFolder(name: String, color: Color): GridItem.Folder =
+        withContext(Dispatchers.IO) {
+            val dir   = File(context.filesDir, "folders/$name")
+            dir.mkdirs()
+
+            val today = dateFormatter.format(Date())
+
+            GridItem.Folder(
+                FolderItem(
+                    id       = "created_${name.hashCode()}",
+                    name     = name,
+                    date     = today,
+                    path     = dir.absolutePath,
+                    metadata = "created",
+                    color    = color
+                )
+            )
+        }
 }
