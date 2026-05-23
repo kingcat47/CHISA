@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.chisa.components.Popup.CreateFolderDialog
 import com.example.chisa.components.Popup.Dialog
 import com.example.chisa.components.Popup.DialogOption
 import com.example.chisa.components.Popup.DropdownItem
@@ -61,7 +62,7 @@ fun FilterToolbar(
     onFilterChange: (ContentFilter) -> Unit = {},
     selectedSort: SortOrder = SortOrder.DATE,
     onSortChange: (SortOrder) -> Unit = {},
-    onAddFolderClick: () -> Unit = {},
+    onAddFolderClick: (name: String, color: Color) -> Unit = { _, _ -> },
     onAddFileClick: () -> Unit = {}
 ) {
     // 필터 드롭다운 열림/닫힘 상태
@@ -72,6 +73,9 @@ fun FilterToolbar(
 
     // 신규 추가 드롭다운 열림/닫힘 상태 (폴더 / 파일 선택)
     var addExpanded by remember { mutableStateOf(false) }
+
+    // 폴더 생성 다이얼로그 열림/닫힘 상태
+    var createFolderExpanded by remember { mutableStateOf(false) }
 
     // 현재 필터에 해당하는 표시 텍스트
     val filterLabel = when (selectedFilter) {
@@ -142,7 +146,7 @@ fun FilterToolbar(
                         DialogOption(
                             icon    = Icons.Default.CreateNewFolder,
                             label   = "폴더 생성",
-                            onClick = { onAddFolderClick() }
+                            onClick = { createFolderExpanded = true }
                         ),
                         DialogOption(
                             icon    = Icons.Default.FileUpload,
@@ -150,6 +154,17 @@ fun FilterToolbar(
                             onClick = { onAddFileClick() }
                         )
                     )
+                )
+            }
+
+            // 폴더 생성 다이얼로그
+            if (createFolderExpanded) {
+                CreateFolderDialog(
+                    onDismiss = { createFolderExpanded = false },
+                    onConfirm = { name, color ->
+                        onAddFolderClick(name, color)
+                        createFolderExpanded = false
+                    }
                 )
             }
 
