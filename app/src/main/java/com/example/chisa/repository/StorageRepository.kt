@@ -1,5 +1,6 @@
 package com.example.chisa.repository
 
+import androidx.compose.ui.graphics.Color
 import com.example.chisa.model.GridItem
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -22,4 +23,12 @@ interface StorageRepository {
      * IO 작업이므로 반드시 suspend 컨텍스트(또는 Dispatchers.IO)에서 호출해야 한다.
      */
     suspend fun loadAllItems(): List<GridItem>
+
+    /**
+     * 앱 내부 저장소에 폴더를 생성하고 [GridItem.Folder] 로 반환한다.
+     *
+     * @param name  폴더 이름
+     * @param color 폴더 색상
+     */
+    suspend fun createFolder(name: String, color: Color): GridItem.Folder
 }

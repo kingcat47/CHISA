@@ -33,7 +33,7 @@ fun FolderGridItem(
     onFilterChange: (ContentFilter) -> Unit = {},
     selectedSort: SortOrder = SortOrder.DATE,
     onSortChange: (SortOrder) -> Unit = {},
-    onAddFolderClick: () -> Unit = {},
+    onAddFolderClick: (name: String, color: androidx.compose.ui.graphics.Color) -> Unit = { _, _ -> },
     onAddFileClick: () -> Unit = {}
 ) {
     Column(modifier = modifier) {
