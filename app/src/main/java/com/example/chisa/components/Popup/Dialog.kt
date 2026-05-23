@@ -37,7 +37,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 
 // ──────────────────────────────────────────────────────────────────────────────
 // SelectionDialog
@@ -131,10 +136,23 @@ fun CreateFolderDialog(
     var folderName    by remember { mutableStateOf("") }
     var selectedColor by remember { mutableStateOf(folderColorOptions.first()) }
 
-    Dialog(onDismissRequest = onDismiss) {
+    val focusRequester = remember { FocusRequester() }
+    val keyboard       = LocalSoftwareKeyboardController.current
+
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(100)
+        focusRequester.requestFocus()
+        keyboard?.show()
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
         Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = Color.White
+            shape    = RoundedCornerShape(12.dp),
+            color    = Color.White,
+            modifier = Modifier.fillMaxWidth(0.9f)
         ) {
             Column(
                 modifier = Modifier.padding(24.dp)
@@ -153,7 +171,9 @@ fun CreateFolderDialog(
                     onValueChange = { folderName = it },
                     label         = { Text("폴더 이름") },
                     singleLine    = true,
-                    modifier      = Modifier.fillMaxWidth()
+                    modifier      = Modifier
+                        .fillMaxWidth()
+                        .focusRequester(focusRequester)
                 )
 
                 Spacer(modifier = Modifier.height(20.dp))

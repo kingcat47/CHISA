@@ -3,6 +3,7 @@ package com.example.chisa.viewmodel
 import android.app.Application
 import android.net.Uri
 import android.provider.OpenableColumns
+import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.chisa.mock.mockGridItems
@@ -132,6 +133,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } ?: return@launch  // 파일명을 읽지 못하면 추가 중단
 
             allItems = allItems + newItem
+            applyFilterAndSort()
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // createFolder
+    //   Repository 를 통해 폴더를 생성하고 allItems 에 추가한다.
+    //   추가 후 현재 필터/정렬 기준으로 목록을 재계산한다.
+    //
+    //   @param name   폴더 이름
+    //   @param color  사용자가 선택한 폴더 색상
+    // ──────────────────────────────────────────────────────────────────────────
+    fun createFolder(name: String, color: Color) {
+        viewModelScope.launch {
+            val newFolder = repository.createFolder(name, color)
+            allItems = allItems + newFolder
             applyFilterAndSort()
         }
     }
