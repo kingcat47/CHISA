@@ -33,10 +33,12 @@ class MainActivity : ComponentActivity() {
                 val viewModel: MainViewModel = viewModel()
 
                 // 필터/정렬/로딩 상태 구독 — 값이 바뀔 때마다 UI 자동 재구성
-                val filteredItems  by viewModel.filteredItems.collectAsState()
-                val selectedFilter by viewModel.selectedFilter.collectAsState()
-                val selectedSort   by viewModel.selectedSort.collectAsState()
-                val isLoading      by viewModel.isLoading.collectAsState()
+                val filteredItems     by viewModel.filteredItems.collectAsState()
+                val selectedFilter   by viewModel.selectedFilter.collectAsState()
+                val selectedSort     by viewModel.selectedSort.collectAsState()
+                val isLoading        by viewModel.isLoading.collectAsState()
+                // 이동 다이얼로그에 표시할 폴더 목록 — ViewModel 이 allItems 기반으로 유지
+                val availableFolders by viewModel.availableFolders.collectAsState()
                 // TopBar 타이틀 — ViewModel 이 currentPath 기반으로 계산해 제공
                 // UI 에서 직접 계산하지 않음으로써 MVVM 단방향 흐름을 유지한다.
                 val currentFolderName by viewModel.currentFolderName.collectAsState()
@@ -92,15 +94,20 @@ class MainActivity : ComponentActivity() {
                             }
                         } else {
                             FolderGridItem(
-                                items          = filteredItems,
-                                selectedFilter = selectedFilter,
-                                onFilterChange = { viewModel.setFilter(it) },
-                                selectedSort   = selectedSort,
-                                onSortChange   = { viewModel.setSort(it) },
+                                items            = filteredItems,
+                                selectedFilter   = selectedFilter,
+                                onFilterChange   = { viewModel.setFilter(it) },
+                                selectedSort     = selectedSort,
+                                onSortChange     = { viewModel.setSort(it) },
                                 onAddFolderClick = { name, color -> viewModel.createFolder(name, color) },
                                 onAddFileClick   = { filePickerLauncher.launch(arrayOf("*/*")) },
                                 onFolderClick    = { viewModel.enterFolder(it) },
-                                modifier       = Modifier.padding(innerPadding)
+                                // 아이템 편집 콜백 — ViewModel 의 UseCase 기반 함수로 위임
+                                onDeleteItem     = { item -> viewModel.deleteItem(item) },
+                                onRenameItem     = { item, newName -> viewModel.renameItem(item, newName) },
+                                onMoveItem       = { item, targetFolder -> viewModel.moveItem(item, targetFolder) },
+                                availableFolders = availableFolders,
+                                modifier         = Modifier.padding(innerPadding)
                             )
                         }
                     }

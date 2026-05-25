@@ -221,4 +221,124 @@ class StorageRepositoryImpl(private val context: Context) : StorageRepository {
                 )
             )
         }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // deleteItem
+    //   파일 또는 폴더를 실제 저장소에서 삭제한다.
+    //   폴더의 경우 deleteRecursively() 로 하위 항목까지 모두 제거한다.
+    //
+    //   주의: MediaStore 에서 조회된 외부 저장소 파일은 Android 10 이상에서
+    //         MANAGE_EXTERNAL_STORAGE 권한이 없으면 삭제가 실패할 수 있다.
+    //         앱 전용 디렉토리(filesDir)에 생성된 파일/폴더는 항상 삭제 가능하다.
+    //
+    //   @param item 삭제할 GridItem
+    //   @return 삭제 성공 여부 (파일이 원래 없어도 true 반환)
+    // ──────────────────────────────────────────────────────────────────────────
+    override suspend fun deleteItem(item: GridItem): Boolean = withContext(Dispatchers.IO) {
+        val path = when (item) {
+            is GridItem.Folder -> item.item.path
+            is GridItem.File   -> item.item.path
+        }
+        val target = File(path)
+
+        // 파일이 존재하지 않으면 이미 삭제된 것으로 간주해 true 반환
+        if (!target.exists()) return@withContext true
+
+        // 폴더는 하위 내용 포함 재귀 삭제, 파일은 단순 삭제
+        target.deleteRecursively()
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // renameItem
+    //   파일 또는 폴더의 이름을 변경한다.
+    //
+    //   파일의 경우:
+    //     - 새 이름에 확장자가 없으면 기존 확장자를 자동으로 붙인다.
+    //       예) "새파일"  →  "새파일.jpg"  (기존이 jpg 였다면)
+    //     - 새 이름에 확장자가 있으면 그대로 사용한다.
+    //
+    //   폴더의 경우:
+    //     - 같은 부모 경로 아래에서 디렉토리명만 변경한다.
+    //
+    //   실패(renameTo 가 false) 시 원본 GridItem 을 그대로 반환한다.
+    //
+    //   @param item    이름 변경 대상
+    //   @param newName 새 이름 문자열
+    // ──────────────────────────────────────────────────────────────────────────
+    override suspend fun renameItem(item: GridItem, newName: String): GridItem =
+        withContext(Dispatchers.IO) {
+            when (item) {
+                is GridItem.Folder -> {
+                    val oldDir    = File(item.item.path)
+                    val parentDir = oldDir.parentFile ?: return@withContext item
+                    val newDir    = File(parentDir, newName)
+
+                    if (oldDir.renameTo(newDir)) {
+                        // 이름·경로가 바뀐 새 FolderItem 으로 교체
+                        GridItem.Folder(item.item.copy(name = newName, path = newDir.absolutePath))
+                    } else {
+                        item  // rename 실패 시 원본 유지
+                    }
+                }
+                is GridItem.File -> {
+                    val oldFile    = File(item.item.path)
+                    val parentDir  = oldFile.parentFile ?: return@withContext item
+
+                    // 새 이름에 점(.)이 없으면 기존 확장자를 보존한다
+                    val ext         = oldFile.extension
+                    val newFileName = if (newName.contains(".") || ext.isEmpty()) newName
+                                      else "$newName.$ext"
+                    val newFile     = File(parentDir, newFileName)
+
+                    if (oldFile.renameTo(newFile)) {
+                        GridItem.File(item.item.copy(name = newFileName, path = newFile.absolutePath))
+                    } else {
+                        item
+                    }
+                }
+            }
+        }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // moveItem
+    //   파일 또는 폴더를 대상 폴더 경로 아래로 이동한다.
+    //
+    //   File.renameTo() 를 사용하므로 같은 볼륨(파티션) 내에서만 동작한다.
+    //   이동 후 GridItem 의 path 를 새 경로로 업데이트해서 반환한다.
+    //
+    //   실패 시 원본 GridItem 을 그대로 반환한다.
+    //
+    //   @param item         이동할 GridItem
+    //   @param targetFolder 이동 대상 FolderItem
+    // ──────────────────────────────────────────────────────────────────────────
+    override suspend fun moveItem(item: GridItem, targetFolder: FolderItem): GridItem =
+        withContext(Dispatchers.IO) {
+            val targetDir = File(targetFolder.path)
+
+            // 대상 폴더가 존재하지 않으면 미리 생성한다
+            if (!targetDir.exists()) targetDir.mkdirs()
+
+            when (item) {
+                is GridItem.Folder -> {
+                    val srcDir = File(item.item.path)
+                    val dstDir = File(targetDir, srcDir.name)
+
+                    if (srcDir.renameTo(dstDir)) {
+                        GridItem.Folder(item.item.copy(path = dstDir.absolutePath))
+                    } else {
+                        item
+                    }
+                }
+                is GridItem.File -> {
+                    val srcFile = File(item.item.path)
+                    val dstFile = File(targetDir, srcFile.name)
+
+                    if (srcFile.renameTo(dstFile)) {
+                        GridItem.File(item.item.copy(path = dstFile.absolutePath))
+                    } else {
+                        item
+                    }
+                }
+            }
+        }
 }
