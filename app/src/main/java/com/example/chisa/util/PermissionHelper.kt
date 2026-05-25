@@ -1,4 +1,4 @@
-package com.example.chisa.components.util
+package com.example.chisa.util
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -13,6 +13,10 @@ import androidx.core.content.ContextCompat
 // ──────────────────────────────────────────────────────────────────────────────
 // StoragePermissionHandler
 //   저장소 읽기 권한을 처리하는 Composable 헬퍼.
+//
+//   components/util/ 이 아닌 util/ 에 위치하는 이유:
+//     UI 컴포넌트가 아니라 앱 전역에서 재사용 가능한 인프라 레이어 유틸이기 때문.
+//     권한 처리는 특정 화면에 종속되지 않으므로 공통 util 패키지가 적절하다.
 //
 //   [Android 버전별 권한 분기]
 //     - API 33(Android 13) 이상 : READ_MEDIA_IMAGES / VIDEO / AUDIO (세분화)
