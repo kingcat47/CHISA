@@ -6,7 +6,6 @@ import android.provider.OpenableColumns
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.chisa.mock.mockGridItems
 import com.example.chisa.model.FileItem
 import com.example.chisa.model.FolderItem
 import com.example.chisa.model.GridItem
@@ -14,6 +13,9 @@ import java.io.File
 import com.example.chisa.util.colorForExtension
 import com.example.chisa.repository.StorageRepository
 import com.example.chisa.repository.StorageRepositoryImpl
+import com.example.chisa.usecase.DeleteItem
+import com.example.chisa.usecase.MoveItem
+import com.example.chisa.usecase.RenameItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -70,8 +72,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // application(Context) 를 주입해 MediaStore 쿼리에 사용
     private val repository: StorageRepository = StorageRepositoryImpl(application)
 
-    // 전체 원본 데이터 — 앱 시작 시 mock 으로 초기화, loadItems() 호출 후 실제 데이터로 교체
-    private var allItems: List<GridItem> = mockGridItems
+    // ── UseCase 인스턴스 ──────────────────────────────────────────────────────
+    // 각 UseCase 는 Repository 를 주입받아 단일 비즈니스 로직만 수행한다.
+    // ViewModel 이 직접 Repository 를 호출하지 않고 UseCase 를 통해 호출함으로써
+    // 책임을 분리하고 테스트 시 UseCase 단위로 mock 교체가 가능해진다.
+    private val deleteItemUseCase = DeleteItem(repository)
+    private val renameItemUseCase = RenameItem(repository)
+    private val moveItemUseCase   = MoveItem(repository)
+
+    // 전체 원본 데이터 — loadItems() 호출 후 실제 저장소 데이터로 채워진다
+    private var allItems: List<GridItem> = emptyList()
 
     // ── 로딩 상태 ─────────────────────────────────────────────────────────────
     private val _isLoading = MutableStateFlow(false)
@@ -106,8 +116,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     // ── 최종 노출 목록 (필터 + 정렬 적용 결과) ────────────────────────────────
-    private val _filteredItems = MutableStateFlow(allItems)
+    private val _filteredItems = MutableStateFlow<List<GridItem>>(emptyList())
     val filteredItems: StateFlow<List<GridItem>> = _filteredItems.asStateFlow()
+
+    // ── 이동 다이얼로그에서 선택 가능한 폴더 목록 ─────────────────────────────
+    // allItems 에서 폴더만 추출해서 노출한다.
+    // UI 에서 이 목록을 구독해 MoveItemDialog 에 전달한다.
+    private val _availableFolders = MutableStateFlow<List<FolderItem>>(emptyList())
+    val availableFolders: StateFlow<List<FolderItem>> = _availableFolders.asStateFlow()
 
     // ──────────────────────────────────────────────────────────────────────────
     // loadItems
@@ -204,6 +220,100 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // ──────────────────────────────────────────────────────────────────────────
+    // deleteItem
+    //   UseCase 를 통해 저장소에서 항목을 삭제하고, allItems 목록에서도 제거한다.
+    //   낙관적 업데이트(optimistic update): 파일 시스템 결과와 무관하게 즉시 목록에서 제거한다.
+    //   파일이 애초에 존재하지 않거나(mock 데이터 등) 삭제에 성공한 경우 모두 제거한다.
+    //
+    //   @param item 삭제할 GridItem
+    // ──────────────────────────────────────────────────────────────────────────
+    fun deleteItem(item: GridItem) {
+        viewModelScope.launch {
+            // 파일 시스템 삭제 시도 (실패해도 UI 는 갱신한다)
+            deleteItemUseCase(item)
+            // in-memory 목록에서 즉시 제거
+            allItems = allItems.filter { it != item }
+
+            // ── 유령 폴더 방지 ────────────────────────────────────────────────
+            // 삭제된 항목이 폴더이고 현재 경로 스택(_currentPath)에 포함되어 있다면,
+            // 그 폴더 지점부터 이후를 전부 제거해 유효하지 않은 경로를 정리한다.
+            //
+            // 예) 경로: [FolderA, FolderB, FolderC] 에서 FolderB 삭제
+            //   → [FolderA]  (FolderB 및 그 하위 FolderC 경로 모두 제거)
+            //
+            // 비교 기준을 id 로 쓰는 이유:
+            //   이름이 변경된 경우 객체 동등성(equals)이 달라질 수 있지만
+            //   id 는 항상 동일하게 유지되기 때문이다.
+            if (item is GridItem.Folder) {
+                val index = _currentPath.value.indexOfFirst { it.id == item.item.id }
+                if (index != -1) {
+                    _currentPath.value = _currentPath.value.take(index)
+                }
+            }
+
+            applyFilterAndSort()
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // renameItem
+    //   UseCase 를 통해 저장소의 파일/폴더명 변경을 시도하고, allItems 목록도 갱신한다.
+    //
+    //   낙관적 업데이트(optimistic update):
+    //     파일 시스템 rename 성공 여부와 무관하게 in-memory 모델을 즉시 업데이트한다.
+    //     mock 데이터나 MediaStore 파일처럼 실제 rename 이 불가능한 경우에도
+    //     앱 내 목록에는 변경된 이름이 바로 반영된다.
+    //
+    //   @param item    이름을 변경할 GridItem
+    //   @param newName 새 이름 문자열
+    // ──────────────────────────────────────────────────────────────────────────
+    fun renameItem(item: GridItem, newName: String) {
+        viewModelScope.launch {
+            // 파일 시스템 rename 시도 (실패해도 UI 는 갱신한다)
+            renameItemUseCase(item, newName)
+
+            // in-memory 모델을 새 이름으로 즉시 교체
+            val updated = when (item) {
+                is GridItem.Folder -> GridItem.Folder(item.item.copy(name = newName))
+                is GridItem.File   -> GridItem.File(item.item.copy(name = newName))
+            }
+            allItems = allItems.map { if (it == item) updated else it }
+            applyFilterAndSort()
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // moveItem
+    //   UseCase 를 통해 저장소의 파일/폴더 이동을 시도하고, allItems 도 갱신한다.
+    //
+    //   낙관적 업데이트(optimistic update):
+    //     파일 시스템 이동 성공 여부와 무관하게 in-memory 모델의 경로를 즉시 업데이트한다.
+    //     이동 후 applyFilterAndSort() 가 새 경로 기준으로 목록을 재계산하므로
+    //     현재 폴더 안에서 보이지 않게 되는 효과가 자연스럽게 발생한다.
+    //
+    //   @param item         이동할 GridItem
+    //   @param targetFolder 이동 대상 FolderItem
+    // ──────────────────────────────────────────────────────────────────────────
+    fun moveItem(item: GridItem, targetFolder: FolderItem) {
+        viewModelScope.launch {
+            // 파일 시스템 이동 시도 (실패해도 UI 는 갱신한다)
+            moveItemUseCase(item, targetFolder)
+
+            // in-memory 모델의 경로를 대상 폴더 기준으로 즉시 업데이트
+            val newPath = when (item) {
+                is GridItem.Folder -> "${targetFolder.path}/${item.item.name}"
+                is GridItem.File   -> "${targetFolder.path}/${item.item.name}"
+            }
+            val updated = when (item) {
+                is GridItem.Folder -> GridItem.Folder(item.item.copy(path = newPath))
+                is GridItem.File   -> GridItem.File(item.item.copy(path = newPath))
+            }
+            allItems = allItems.map { if (it == item) updated else it }
+            applyFilterAndSort()
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
     // setFilter: 필터를 변경하고 목록을 갱신한다.
     // ──────────────────────────────────────────────────────────────────────────
     fun setFilter(filter: ContentFilter) {
@@ -242,10 +352,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // ──────────────────────────────────────────────────────────────────────────
     private fun itemsInCurrentFolder(): List<GridItem> {
         val currentFolder = _currentPath.value.lastOrNull()
-            ?: return allItems  // 루트면 전체 반환
 
+        // allItems 에 존재하는 모든 폴더의 path 집합
+        // 루트 필터링과 폴더 안 필터링 양쪽에서 사용한다
+        val folderPaths = allItems
+            .filterIsInstance<GridItem.Folder>()
+            .map { it.item.path }
+            .toSet()
+
+        if (currentFolder == null) {
+            // ── 루트 ──────────────────────────────────────────────────────────
+            // "어떤 폴더의 직계 자식도 아닌 항목"만 표시한다.
+            // 이렇게 하지 않으면 다른 폴더로 이동한 항목이 루트에도 계속 남아 있게 된다.
+            //
+            // 판단 기준:
+            //   item 의 부모 경로(parent)가 현재 allItems 의 폴더 path 목록에
+            //   포함되지 않으면 → 루트 항목으로 간주해 표시
+            //   포함되면 → 특정 폴더 안에 속한 항목이므로 루트에서 숨김
+            return allItems.filter { item ->
+                val parentPath = when (item) {
+                    is GridItem.Folder -> File(item.item.path).parent ?: ""
+                    is GridItem.File   -> File(item.item.path).parent ?: ""
+                }
+                parentPath !in folderPaths
+            }
+        }
+
+        // ── 폴더 안 ───────────────────────────────────────────────────────────
+        // 현재 폴더의 path 를 부모로 갖는 직계 자식 항목만 표시한다.
         return allItems.filter { item ->
-            // 아이템의 상위 경로(parent)가 현재 폴더 경로와 일치하는 항목만 포함
             val parentPath = when (item) {
                 is GridItem.Folder -> File(item.item.path).parent ?: ""
                 is GridItem.File   -> File(item.item.path).parent ?: ""
@@ -268,6 +403,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             SortOrder.DATE -> filtered.sortedByDescending { it.sortDate }
             SortOrder.NAME -> filtered.sortedBy { it.sortName }
         }
+
+        // allItems 전체에서 폴더만 추출해 이동 다이얼로그용 목록 갱신
+        _availableFolders.value = allItems.filterIsInstance<GridItem.Folder>().map { it.item }
     }
 
 }
