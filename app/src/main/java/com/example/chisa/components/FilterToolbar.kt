@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CreateNewFolder
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -63,7 +64,8 @@ fun FilterToolbar(
     selectedSort: SortOrder = SortOrder.DATE,
     onSortChange: (SortOrder) -> Unit = {},
     onAddFolderClick: (name: String, color: Color) -> Unit = { _, _ -> },
-    onAddFileClick: () -> Unit = {}
+    onAddFileClick: () -> Unit = {},
+    onImportFolderClick: () -> Unit = {}
 ) {
     // 필터 드롭다운 열림/닫힘 상태
     var filterExpanded by remember { mutableStateOf(false) }
@@ -150,8 +152,13 @@ fun FilterToolbar(
                         ),
                         DialogOption(
                             icon    = Icons.Default.FileUpload,
-                            label   = "불러오기",
+                            label   = "파일 불러오기",
                             onClick = { onAddFileClick() }
+                        ),
+                        DialogOption(
+                            icon    = Icons.Default.FolderOpen,
+                            label   = "폴더 불러오기",
+                            onClick = { onImportFolderClick() }
                         )
                     )
                 )
