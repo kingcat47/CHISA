@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.chisa.model.FileItem
 import com.example.chisa.model.FolderItem
 import com.example.chisa.model.GridItem
 import com.example.chisa.repository.StorageRepository
@@ -79,6 +80,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // 전체 원본 데이터
     private var allItems: List<GridItem> = emptyList()
 
+    // ── 초기 로딩 상태 ────────────────────────────────────────────────────────
+    // 앱 시작 시 내부 저장소 스캔이 완료될 때까지 true. UI 에서 스피너 표시에 사용.
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
     // ── 필터 상태 ─────────────────────────────────────────────────────────────
     private val _selectedFilter = MutableStateFlow(ContentFilter.ALL)
     val selectedFilter: StateFlow<ContentFilter> = _selectedFilter.asStateFlow()
@@ -121,6 +127,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // importFolder() 실행 중에는 true 가 되어 UI 에서 로딩 오버레이를 표시한다.
     private val _isImporting = MutableStateFlow(false)
     val isImporting: StateFlow<Boolean> = _isImporting.asStateFlow()
+
+    // ── ViewModel 초기화 ──────────────────────────────────────────────────────
+    // 앱 시작(또는 프로세스 재시작) 시 내부 저장소를 스캔해 이전 세션 데이터를 복원한다.
+    // init 블록은 ViewModel 인스턴스가 생성될 때 딱 한 번 실행된다.
+    init {
+        viewModelScope.launch {
+            _isLoading.value = true
+            allItems = repository.loadSavedItems()
+            applyFilterAndSort()
+            _isLoading.value = false
+        }
+    }
+
+    // ── 현재 열려있는 파일 ────────────────────────────────────────────────────
+    // null 이면 뷰어가 닫혀있음. FileItem 이 있으면 FileViewer 가 화면에 표시된다.
+    private val _selectedFile = MutableStateFlow<FileItem?>(null)
+    val selectedFile: StateFlow<FileItem?> = _selectedFile.asStateFlow()
 
     // ──────────────────────────────────────────────────────────────────────────
     // importFile
@@ -185,6 +208,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             applyFilterAndSort()
             _isImporting.value = false
         }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // openFile
+    //   파일 아이콘 클릭 시 호출. selectedFile 을 설정해 FileViewer 를 열게 한다.
+    //
+    //   @param file 열어볼 FileItem
+    // ──────────────────────────────────────────────────────────────────────────
+    fun openFile(file: FileItem) {
+        _selectedFile.value = file
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // closeFile
+    //   뷰어 닫기 버튼 또는 뒤로가기 시 호출. selectedFile 을 null 로 초기화해 뷰어를 닫는다.
+    // ──────────────────────────────────────────────────────────────────────────
+    fun closeFile() {
+        _selectedFile.value = null
     }
 
     fun createFolder(name: String, color: Color) {
