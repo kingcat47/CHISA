@@ -2,21 +2,19 @@ package com.example.chisa.viewmodel
 
 import android.app.Application
 import android.net.Uri
-import android.provider.OpenableColumns
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.chisa.model.FileItem
 import com.example.chisa.model.FolderItem
 import com.example.chisa.model.GridItem
-import java.io.File
-import com.example.chisa.util.colorForExtension
 import com.example.chisa.repository.StorageRepository
+import java.io.File
 import com.example.chisa.repository.StorageRepositoryImpl
 import com.example.chisa.usecase.DeleteItem
+import com.example.chisa.usecase.ImportFile
+import com.example.chisa.usecase.ImportFolder
 import com.example.chisa.usecase.MoveItem
 import com.example.chisa.usecase.RenameItem
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -24,10 +22,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 // ──────────────────────────────────────────────────────────────────────────────
 // ContentFilter: 화면에 표시할 항목 종류를 결정하는 필터
@@ -76,16 +70,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // 각 UseCase 는 Repository 를 주입받아 단일 비즈니스 로직만 수행한다.
     // ViewModel 이 직접 Repository 를 호출하지 않고 UseCase 를 통해 호출함으로써
     // 책임을 분리하고 테스트 시 UseCase 단위로 mock 교체가 가능해진다.
-    private val deleteItemUseCase = DeleteItem(repository)
-    private val renameItemUseCase = RenameItem(repository)
-    private val moveItemUseCase   = MoveItem(repository)
+    private val deleteItemUseCase   = DeleteItem(repository)
+    private val renameItemUseCase   = RenameItem(repository)
+    private val moveItemUseCase     = MoveItem(repository)
+    private val importFileUseCase   = ImportFile(repository)
+    private val importFolderUseCase = ImportFolder(repository)
 
-    // 전체 원본 데이터 — loadItems() 호출 후 실제 저장소 데이터로 채워진다
+    // 전체 원본 데이터
     private var allItems: List<GridItem> = emptyList()
-
-    // ── 로딩 상태 ─────────────────────────────────────────────────────────────
-    private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     // ── 필터 상태 ─────────────────────────────────────────────────────────────
     private val _selectedFilter = MutableStateFlow(ContentFilter.ALL)
@@ -125,54 +117,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _availableFolders = MutableStateFlow<List<FolderItem>>(emptyList())
     val availableFolders: StateFlow<List<FolderItem>> = _availableFolders.asStateFlow()
 
-    // ──────────────────────────────────────────────────────────────────────────
-    // loadItems
-    //   Repository 를 통해 실제 디바이스 저장소에서 파일/폴더를 불러온다.
-    //   완료 후 현재 필터/정렬 기준으로 목록을 재계산한다.
-    //   권한이 허용된 직후 MainActivity 에서 호출한다.
-    // ──────────────────────────────────────────────────────────────────────────
-    fun loadItems() {
-        viewModelScope.launch {
-            _isLoading.value = true
-            allItems = repository.loadAllItems()
-            applyFilterAndSort()
-            _isLoading.value = false
-        }
-    }
+    // ── 폴더 가져오기 진행 상태 ───────────────────────────────────────────────
+    // importFolder() 실행 중에는 true 가 되어 UI 에서 로딩 오버레이를 표시한다.
+    private val _isImporting = MutableStateFlow(false)
+    val isImporting: StateFlow<Boolean> = _isImporting.asStateFlow()
 
     // ──────────────────────────────────────────────────────────────────────────
     // importFile
-    //   시스템 파일 피커로 선택한 파일의 URI 를 받아 목록에 추가한다.
-    //   ContentResolver 로 파일명을 읽고, GridItem.File 로 변환해 allItems 에 추가.
-    //   추가 후 현재 필터/정렬 기준으로 목록을 재계산한다.
+    //   파일 피커로 선택한 단일 파일을 앱 내부 저장소로 복사하고 ��록에 추가한다.
+    //   UseCase → Repository 를 통해 복사 후 실제 경로를 가진 GridItem.File 을 받는다.
     //
-    //   @param uri  시스템 파일 피커가 반환한 파일 URI
+    //   @param uri  OpenDocument 가 반환한 파일 URI
     // ──────────────────────────────────────────────────────────────────────────
     fun importFile(uri: Uri) {
         viewModelScope.launch {
-            val context = getApplication<Application>()
-            val newItem = withContext(Dispatchers.IO) {
-                // OpenableColumns 으로 파일명을 읽는다 (실제 경로 없이 URI 만으로 접근 가능)
-                context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                    if (!cursor.moveToFirst()) return@use null
-
-                    val nameCol = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                    val name    = if (nameCol >= 0) cursor.getString(nameCol) else "알 수 없는 파일"
-                    val today   = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-
-                    GridItem.File(
-                        FileItem(
-                            id       = "imported_${uri.hashCode()}",
-                            name     = name ?: "알 수 없는 파일",
-                            date     = today,
-                            path     = uri.toString(),
-                            metadata = "imported",
-                            color    = colorForExtension(name ?: "")
-                        )
-                    )
-                }
-            } ?: return@launch  // 파일명을 읽지 못하면 추가 중단
-
+            val newItem = importFileUseCase(uri)
             allItems = allItems + newItem
             applyFilterAndSort()
         }
@@ -211,6 +170,23 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     //   @param name   폴더 이름
     //   @param color  사용자가 선택한 폴더 색상
     // ──────────────────────────────────────────────────────────────────────────
+    // ──────────────────────────────────────────────────────────────────────────
+    // importFolder
+    //   OpenDocumentTree 로 선택한 폴더의 URI 를 받아 앱 내부 저장소로 복사하고
+    //   allItems 에 추가한다. 진행 중에는 _isImporting = true 로 로딩 오버레이를 표시.
+    //
+    //   @param uri  OpenDocumentTree 가 반환한 트리 URI
+    // ──────────────────────────────────────────────────────────────────────────
+    fun importFolder(uri: Uri) {
+        viewModelScope.launch {
+            _isImporting.value = true
+            val imported = importFolderUseCase(uri)
+            allItems = allItems + imported
+            applyFilterAndSort()
+            _isImporting.value = false
+        }
+    }
+
     fun createFolder(name: String, color: Color) {
         viewModelScope.launch {
             val newFolder = repository.createFolder(name, color)
