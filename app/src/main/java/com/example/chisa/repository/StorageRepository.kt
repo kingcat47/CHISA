@@ -17,6 +17,15 @@ import com.example.chisa.model.GridItem
 interface StorageRepository {
 
     /**
+     * 앱 내부 저장소(filesDir/imports, filesDir/folders)를 스캔해
+     * 이전에 import 하거나 생성한 파일/폴더 목록을 복원한다.
+     *
+     * 앱 재시작 시 ViewModel init 블록에서 호출해 메모리 목록을 재구성한다.
+     * 파일 경로 기반으로 GridItem 을 재생성하므로 폴더 구조는 그대로 유지된다.
+     */
+    suspend fun loadSavedItems(): List<GridItem>
+
+    /**
      * 앱 내부 저장소에 폴더를 생성하고 [GridItem.Folder] 로 반환한다.
      *
      * @param name  폴더 이름
