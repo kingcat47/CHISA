@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import com.example.chisa.model.FileItem
 import com.example.chisa.model.FolderItem
 import com.example.chisa.model.GridItem
 import com.example.chisa.viewmodel.ContentFilter
@@ -27,6 +28,7 @@ import com.example.chisa.viewmodel.SortOrder
 //   onAddFolderClick  : 폴더 생성 확인 시 (이름, 색상) 전달 콜백
 //   onAddFileClick    : 파일 불러오기 버튼 클릭 콜백
 //   onFolderClick     : 폴더 아이템 클릭 시 해당 FolderItem 전달 콜백 (폴더 진입)
+//   onOpenFile        : 파일 아이콘 클릭 시 해당 FileItem 전달 콜백 (뷰어 열기)
 //   onDeleteItem      : 항목 삭제 확인 후 해당 GridItem 전달 콜백
 //   onRenameItem      : 이름 변경 확인 후 (GridItem, 새이름) 전달 콜백
 //   onMoveItem        : 이동 대상 선택 후 (GridItem, 대상FolderItem) 전달 콜백
@@ -44,6 +46,7 @@ fun FolderGridItem(
     onAddFileClick      : () -> Unit = {},
     onImportFolderClick : () -> Unit = {},
     onFolderClick       : (FolderItem) -> Unit = {},
+    onOpenFile          : (FileItem) -> Unit = {},
     onDeleteItem     : (GridItem) -> Unit = {},
     onRenameItem     : (GridItem, String) -> Unit = { _, _ -> },
     onMoveItem       : (GridItem, FolderItem) -> Unit = { _, _ -> },
@@ -77,6 +80,7 @@ fun FolderGridItem(
                     )
                     is GridItem.File -> FileItem(
                         fileItem         = gridItem.item,
+                        onClick          = { onOpenFile(gridItem.item) },
                         onDelete         = { onDeleteItem(gridItem) },
                         onRename         = { newName -> onRenameItem(gridItem, newName) },
                         onMove           = { targetFolder -> onMoveItem(gridItem, targetFolder) },
