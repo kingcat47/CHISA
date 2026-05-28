@@ -55,6 +55,86 @@ class StorageRepositoryImpl(private val context: Context) : StorageRepository {
         colorPalette[abs(name.hashCode()) % colorPalette.size]
 
     // ──────────────────────────────────────────────────────────────────────────
+    // loadSavedItems
+    //   앱 내부 저장소(filesDir/imports, filesDir/folders)를 재귀적으로 스캔해
+    //   이전 세션에서 import 하거나 생성한 항목들을 GridItem 목록으로 복원한다.
+    //
+    //   앱 재시작 시 ViewModel init 블록에서 호출된다.
+    //   파일 경로를 기반으로 GridItem 을 재생성하므로 폴더 구조(부모-자식 관계)는
+    //   그대로 유지된다. 폴더 색상은 colorForName() 으로 복원(해시 기반이라 일관성 유지).
+    // ──────────────────────────────────────────────────────────────────────────
+    override suspend fun loadSavedItems(): List<GridItem> = withContext(Dispatchers.IO) {
+        val result = mutableListOf<GridItem>()
+
+        // imports 폴더: importFile / importFolder 로 가져온 항목들
+        val importsDir = File(context.filesDir, "imports")
+        if (importsDir.exists()) {
+            importsDir.listFiles()?.forEach { child ->
+                result.addAll(scanFile(child))
+            }
+        }
+
+        // folders 폴더: createFolder 로 직접 생성한 폴더들
+        val foldersDir = File(context.filesDir, "folders")
+        if (foldersDir.exists()) {
+            foldersDir.listFiles()?.forEach { child ->
+                result.addAll(scanFile(child))
+            }
+        }
+
+        result
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // scanFile (private)
+    //   단일 File 을 GridItem 으로 변환한다. 디렉토리이면 자식까지 재귀 처리한다.
+    //
+    //   ID 생성 규칙: "imported_${absolutePath.hashCode()}"
+    //     - absolutePath 가 같으면 앱을 껐다 켜도 항상 같은 ID 생성
+    //     - 삭제/이름변경 등 path 가 바뀌는 작업 이후에는 ID 도 달라짐 (의도된 동작)
+    //
+    //   @param file 스캔할 파일 또는 디렉토리
+    // ──────────────────────────────────────────────────────────────────────────
+    private fun scanFile(file: File): List<GridItem> {
+        val result  = mutableListOf<GridItem>()
+        val dateStr = dateFormatter.format(Date(file.lastModified()))
+
+        if (file.isDirectory) {
+            result.add(
+                GridItem.Folder(
+                    FolderItem(
+                        id       = "imported_${file.absolutePath.hashCode()}",
+                        name     = file.name,
+                        date     = dateStr,
+                        path     = file.absolutePath,
+                        metadata = "imported",
+                        color    = colorForName(file.name)
+                    )
+                )
+            )
+            // 자식 항목 재귀 처리
+            file.listFiles()?.forEach { child ->
+                result.addAll(scanFile(child))
+            }
+        } else {
+            result.add(
+                GridItem.File(
+                    FileItem(
+                        id       = "imported_${file.absolutePath.hashCode()}",
+                        name     = file.name,
+                        date     = dateStr,
+                        path     = file.absolutePath,
+                        metadata = "imported",
+                        color    = colorForExtension(file.name)
+                    )
+                )
+            )
+        }
+
+        return result
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
     // importFile
     //   파일 피커(OpenDocument)로 선택한 단일 파일을 앱 내부 저장소(filesDir/imports)로
     //   복사하고 실제 파일 경로를 가진 GridItem.File 로 반환한다.
