@@ -40,9 +40,10 @@ fun FolderGridItem(
     onFilterChange   : (ContentFilter) -> Unit = {},
     selectedSort     : SortOrder = SortOrder.DATE,
     onSortChange     : (SortOrder) -> Unit = {},
-    onAddFolderClick : (name: String, color: androidx.compose.ui.graphics.Color) -> Unit = { _, _ -> },
-    onAddFileClick   : () -> Unit = {},
-    onFolderClick    : (FolderItem) -> Unit = {},
+    onAddFolderClick    : (name: String, color: androidx.compose.ui.graphics.Color) -> Unit = { _, _ -> },
+    onAddFileClick      : () -> Unit = {},
+    onImportFolderClick : () -> Unit = {},
+    onFolderClick       : (FolderItem) -> Unit = {},
     onDeleteItem     : (GridItem) -> Unit = {},
     onRenameItem     : (GridItem, String) -> Unit = { _, _ -> },
     onMoveItem       : (GridItem, FolderItem) -> Unit = { _, _ -> },
@@ -52,12 +53,13 @@ fun FolderGridItem(
 
         // 서브탑바: 필터 + 정렬 + 신규 버튼
         FilterToolbar(
-            selectedFilter   = selectedFilter,
-            onFilterChange   = onFilterChange,
-            selectedSort     = selectedSort,
-            onSortChange     = onSortChange,
-            onAddFolderClick = onAddFolderClick,
-            onAddFileClick   = onAddFileClick
+            selectedFilter      = selectedFilter,
+            onFilterChange      = onFilterChange,
+            selectedSort        = selectedSort,
+            onSortChange        = onSortChange,
+            onAddFolderClick    = onAddFolderClick,
+            onAddFileClick      = onAddFileClick,
+            onImportFolderClick = onImportFolderClick
         )
 
         // 아이템 그리드: 4열 고정
