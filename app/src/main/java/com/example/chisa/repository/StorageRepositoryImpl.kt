@@ -1,8 +1,10 @@
 package com.example.chisa.repository
 
 import android.content.Context
-import android.provider.MediaStore
+import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.compose.ui.graphics.Color
+import androidx.documentfile.provider.DocumentFile
 import com.example.chisa.model.FileItem
 import com.example.chisa.util.colorForExtension
 import com.example.chisa.model.FolderItem
@@ -45,155 +47,132 @@ class StorageRepositoryImpl(private val context: Context) : StorageRepository {
     private val dateFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
 
     // ──────────────────────────────────────────────────────────────────────────
-    // loadAllItems
-    //   폴더 목록 + 파일 목록을 합산해서 반환한다.
-    //   Dispatchers.IO 에서 실행해 메인 스레드 블로킹을 방지한다.
-    // ──────────────────────────────────────────────────────────────────────────
-    override suspend fun loadAllItems(): List<GridItem> = withContext(Dispatchers.IO) {
-        val folders = loadFolders()
-        val files   = loadFiles()
-        folders + files
-    }
-
-    // ──────────────────────────────────────────────────────────────────────────
-    // loadFolders (private)
-    //   MediaStore.Images.Media 에서 미디어 버킷(폴더)을 조회한다.
-    //   같은 BUCKET_ID 가 여러 행에 걸쳐 나올 수 있으므로 seenIds 로 중복 제거한다.
-    // ──────────────────────────────────────────────────────────────────────────
-    private fun loadFolders(): List<GridItem.Folder> {
-        val folders     = mutableListOf<GridItem.Folder>()
-        val seenBuckets = mutableSetOf<Long>()
-
-        val projection = arrayOf(
-            MediaStore.Images.Media.BUCKET_ID,
-            MediaStore.Images.Media.BUCKET_DISPLAY_NAME,
-            MediaStore.Images.Media.DATE_MODIFIED,
-            MediaStore.Images.Media.DATA
-        )
-
-        context.contentResolver.query(
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-            projection,
-            null, null,
-            "${MediaStore.Images.Media.BUCKET_DISPLAY_NAME} ASC"
-        )?.use { cursor ->
-            val colBucketId   = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.BUCKET_ID)
-            val colBucketName = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.BUCKET_DISPLAY_NAME)
-            val colDateMod    = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_MODIFIED)
-            val colData       = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA)
-
-            while (cursor.moveToNext()) {
-                val bucketId = cursor.getLong(colBucketId)
-
-                // 이미 처리한 버킷은 건너뜀 (중복 제거)
-                if (!seenBuckets.add(bucketId)) continue
-
-                val name = cursor.getString(colBucketName) ?: continue
-                // DATA 컬럼에서 파일 경로를 읽어 상위 디렉토리 경로 추출
-                val path = cursor.getString(colData)
-                    ?.let { File(it).parent }
-                    ?: continue
-
-                // DATE_MODIFIED 는 초(seconds) 단위 → 밀리초로 변환
-                val dateMs   = cursor.getLong(colDateMod) * 1000L
-                val dateStr  = dateFormatter.format(Date(dateMs))
-
-                folders.add(
-                    GridItem.Folder(
-                        FolderItem(
-                            id       = "bucket_$bucketId",
-                            name     = name,
-                            date     = dateStr,
-                            path     = path,
-                            metadata = "media folder",
-                            color    = colorForName(name)
-                        )
-                    )
-                )
-            }
-        }
-
-        return folders
-    }
-
-    // ──────────────────────────────────────────────────────────────────────────
-    // loadFiles (private)
-    //   이미지 / 영상 / 오디오 URI 에서 파일 목록을 조회해 합산한다.
-    // ──────────────────────────────────────────────────────────────────────────
-    private fun loadFiles(): List<GridItem.File> {
-        val mediaUris = listOf(
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI to "image",
-            MediaStore.Video.Media.EXTERNAL_CONTENT_URI  to "video",
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI  to "audio"
-        )
-
-        return mediaUris.flatMap { (uri, type) -> queryMediaFiles(uri, type) }
-    }
-
-    // ──────────────────────────────────────────────────────────────────────────
-    // queryMediaFiles (private)
-    //   단일 MediaStore URI 에서 파일 목록을 조회하는 공통 쿼리 함수.
-    //   이미지/영상/오디오 모두 같은 컬럼 구조를 공유하므로 재사용한다.
-    //
-    //   @param uri      조회할 MediaStore URI (Images / Video / Audio)
-    //   @param fileType 파일 종류 레이블 (metadata 필드에 저장)
-    // ──────────────────────────────────────────────────────────────────────────
-    private fun queryMediaFiles(
-        uri: android.net.Uri,
-        fileType: String
-    ): List<GridItem.File> {
-        val files = mutableListOf<GridItem.File>()
-
-        val projection = arrayOf(
-            MediaStore.MediaColumns._ID,
-            MediaStore.MediaColumns.DISPLAY_NAME,
-            MediaStore.MediaColumns.DATE_MODIFIED,
-            MediaStore.MediaColumns.DATA
-        )
-
-        context.contentResolver.query(
-            uri,
-            projection,
-            null, null,
-            "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
-        )?.use { cursor ->
-            val colId       = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
-            val colName     = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
-            val colDateMod  = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_MODIFIED)
-            val colData     = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DATA)
-
-            while (cursor.moveToNext()) {
-                val id      = cursor.getLong(colId)
-                val name    = cursor.getString(colName) ?: continue
-                val path    = cursor.getString(colData) ?: continue
-                val dateMs  = cursor.getLong(colDateMod) * 1000L
-                val dateStr = dateFormatter.format(Date(dateMs))
-
-                files.add(
-                    GridItem.File(
-                        FileItem(
-                            id       = "${fileType}_$id",
-                            name     = name,
-                            date     = dateStr,
-                            path     = path,
-                            metadata = fileType,
-                            color    = colorForExtension(name)
-                        )
-                    )
-                )
-            }
-        }
-
-        return files
-    }
-
-    // ──────────────────────────────────────────────────────────────────────────
     // colorForName
     //   폴더 이름의 해시값을 기반으로 색상 팔레트에서 색상을 선택한다.
     //   같은 이름은 항상 같은 색상을 반환한다.
     // ──────────────────────────────────────────────────────────────────────────
     private fun colorForName(name: String): Color =
         colorPalette[abs(name.hashCode()) % colorPalette.size]
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // importFile
+    //   파일 피커(OpenDocument)로 선택한 단일 파일을 앱 내부 저장소(filesDir/imports)로
+    //   복사하고 실제 파일 경로를 가진 GridItem.File 로 반환한다.
+    //
+    //   URI 를 path 로 그대로 저장하면 File(path).parent 기반 폴더 필터링이 깨지므로
+    //   반드시 복사 후 실제 경로를 저장해야 한다.
+    //
+    //   @param uri  OpenDocument 가 반환한 파일 URI
+    // ──────────────────────────────────────────────────────────────────────────
+    override suspend fun importFile(uri: Uri): GridItem.File = withContext(Dispatchers.IO) {
+        val name = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            if (!cursor.moveToFirst()) return@use null
+            val col = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (col >= 0) cursor.getString(col) else null
+        } ?: "알 수 없는 파일"
+
+        val destDir = File(context.filesDir, "imports")
+        destDir.mkdirs()
+        val destFile = File(destDir, name)
+
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            destFile.outputStream().use { output -> input.copyTo(output) }
+        }
+
+        val today = dateFormatter.format(Date())
+        GridItem.File(
+            FileItem(
+                id       = "imported_${destFile.absolutePath.hashCode()}",
+                name     = name,
+                date     = today,
+                path     = destFile.absolutePath,
+                metadata = "imported",
+                color    = colorForExtension(name)
+            )
+        )
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // importFolder
+    //   OpenDocumentTree 로 얻은 트리 URI 를 순회해 앱 내부 저장소(filesDir/imports)로
+    //   폴더 구조 전체를 복사하고 GridItem 목록으로 반환한다.
+    //
+    //   복사 결과물은 실제 파일 경로(absolutePath)를 가지므로
+    //   기존 File(path).parent 기반 폴더 필터링과 완전히 호환된다.
+    //
+    //   @param uri  OpenDocumentTree 가 반환한 트리 URI
+    // ──────────────────────────────────────────────────────────────────────────
+    override suspend fun importFolder(uri: Uri): List<GridItem> = withContext(Dispatchers.IO) {
+        val root = DocumentFile.fromTreeUri(context, uri) ?: return@withContext emptyList()
+        val destBase = File(context.filesDir, "imports")
+        destBase.mkdirs()
+        traverseDocumentTree(root, destBase)
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // traverseDocumentTree (private)
+    //   DocumentFile 트리를 재귀적으로 순회하며 GridItem 목록을 만든다.
+    //
+    //   - 디렉토리: destDir 아래에 동일한 이름의 디렉토리를 생성하고 FolderItem 추가.
+    //              자식 항목을 재귀 호출로 처리한다.
+    //   - 파일:    ContentResolver 로 InputStream 을 열어 destDir 에 복사 후 FileItem 추가.
+    //              복사 실패 시 해당 파일은 조용히 건너뛴다.
+    //
+    //   @param doc     현재 처리 중인 DocumentFile (디렉토리 또는 파일)
+    //   @param destDir 복사 대상 부모 디렉토리 (실제 File 경로)
+    // ──────────────────────────────────────────────────────────────────────────
+    private fun traverseDocumentTree(doc: DocumentFile, destDir: File): List<GridItem> {
+        val result = mutableListOf<GridItem>()
+        val name   = doc.name ?: return result
+        val today  = dateFormatter.format(Date())
+
+        if (doc.isDirectory) {
+            val thisDir = File(destDir, name)
+            thisDir.mkdirs()
+
+            result.add(
+                GridItem.Folder(
+                    FolderItem(
+                        id       = "imported_${thisDir.absolutePath.hashCode()}",
+                        name     = name,
+                        date     = today,
+                        path     = thisDir.absolutePath,
+                        metadata = "imported",
+                        color    = colorForName(name)
+                    )
+                )
+            )
+
+            doc.listFiles().forEach { child ->
+                result.addAll(traverseDocumentTree(child, thisDir))
+            }
+        } else {
+            val destFile = File(destDir, name)
+
+            try {
+                context.contentResolver.openInputStream(doc.uri)?.use { input ->
+                    destFile.outputStream().use { output -> input.copyTo(output) }
+                }
+            } catch (e: Exception) {
+                return result  // 복사 실패 시 이 파일은 건너뜀
+            }
+
+            result.add(
+                GridItem.File(
+                    FileItem(
+                        id       = "imported_${destFile.absolutePath.hashCode()}",
+                        name     = name,
+                        date     = today,
+                        path     = destFile.absolutePath,
+                        metadata = "imported",
+                        color    = colorForExtension(name)
+                    )
+                )
+            )
+        }
+
+        return result
+    }
 
     // ──────────────────────────────────────────────────────────────────────────
     // createFolder

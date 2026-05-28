@@ -1,5 +1,6 @@
 package com.example.chisa.repository
 
+import android.net.Uri
 import androidx.compose.ui.graphics.Color
 import com.example.chisa.model.FolderItem
 import com.example.chisa.model.GridItem
@@ -14,16 +15,6 @@ import com.example.chisa.model.GridItem
 //     - 실제 구현체는 StorageRepositoryImpl 에서 담당
 // ──────────────────────────────────────────────────────────────────────────────
 interface StorageRepository {
-
-    /**
-     * 디바이스 저장소에서 폴더와 파일을 모두 조회해 [GridItem] 목록으로 반환한다.
-     *
-     * - 폴더: MediaStore 에서 미디어 버킷(bucket) 단위로 추출
-     * - 파일: 이미지 / 영상 / 오디오 파일 전체
-     *
-     * IO 작업이므로 반드시 suspend 컨텍스트(또는 Dispatchers.IO)에서 호출해야 한다.
-     */
-    suspend fun loadAllItems(): List<GridItem>
 
     /**
      * 앱 내부 저장소에 폴더를 생성하고 [GridItem.Folder] 로 반환한다.
@@ -67,4 +58,21 @@ interface StorageRepository {
      * @return 이동된 새 [GridItem] (경로 업데이트됨). 실패 시 원본 반환.
      */
     suspend fun moveItem(item: GridItem, targetFolder: FolderItem): GridItem
+
+    /**
+     * 기기에서 선택한 폴더(트리 URI)를 앱 내부 저장소로 복사하고
+     * 폴더 구조를 유지한 [GridItem] 목록으로 반환한다.
+     *
+     * @param uri  OpenDocumentTree 로 얻은 트리 URI
+     * @return 가져온 폴더와 파일들의 [GridItem] 목록 (재귀적으로 평탄화)
+     */
+    /**
+     * 파일 피커로 선택한 단일 파일을 앱 내부 저장소로 복사하고 [GridItem.File] 로 반환한다.
+     *
+     * @param uri  OpenDocument 로 얻은 파일 URI
+     * @return 복사된 파일의 [GridItem.File]
+     */
+    suspend fun importFile(uri: Uri): GridItem.File
+
+    suspend fun importFolder(uri: Uri): List<GridItem>
 }
