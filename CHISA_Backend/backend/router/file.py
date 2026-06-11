@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Body, File, HTTPException, Path as PathParam, Query, UploadFile
-from pydantic import BaseModel, Field
 
+from ..schema.file import FolderCreatePayload, MoveFilePayload, MoveFolderPayload, RenamePayload
+from ..schema.state import Node
 from ..utils.file_manager import FileSystemManager
-from ..utils.system_manager import Node
 from .common import (
 	FILES_ROOT,
 	check_sibling_duplicate,
@@ -28,24 +27,6 @@ from .common import (
 )
 
 router = APIRouter(prefix="/files", tags=["files"])
-
-
-class RenamePayload(BaseModel):
-	new_name: str = Field(..., min_length=1)
-
-
-class FolderCreatePayload(BaseModel):
-	path: str = Field(..., min_length=1)
-
-
-class MoveFolderPayload(BaseModel):
-	target_parent_id: UUID | None = None
-	target_parent_path: str | None = None
-
-
-class MoveFilePayload(BaseModel):
-	target_parent_id: UUID | None = None
-	target_parent_path: str | None = None
 
 
 @router.post("/files/upload")
@@ -242,63 +223,3 @@ def delete_folder(id: UUID = PathParam(...), recursive: bool = Query(True)):
 	remove_node_recursive(state, node_id)
 	save_state(state)
 	return result
-
-
-@router.post("/restruct/apply")
-def apply_restruct(command: dict[str, Any] = Body(...)):
-	manager = FileSystemManager(str(FILES_ROOT))
-	state = load_state()
-	operations = command.get("operations") or command.get("actions") or command
-	if not isinstance(operations, list):
-		raise HTTPException(status_code=400, detail="Invalid restructure payload")
-	results = []
-	for op in operations:
-		if not isinstance(op, dict):
-			raise HTTPException(status_code=400, detail="Invalid operation format")
-		action = op.get("action")
-		try:
-			if action == "create_folder":
-				result = manager.create_folder(op["path"])
-				ensure_folder_path(state, op["path"])
-			elif action == "delete_folder":
-				result = manager.delete_folder(op["path"], recursive=op.get("recursive", True))
-				node_id = node_by_path(state, op["path"])
-				if node_id:
-					remove_node_recursive(state, node_id)
-			elif action == "rename_folder":
-				result = manager.rename_folder(op["path"], op["new_name"])
-				node_id = node_by_path(state, op["path"])
-				if node_id and node_id in state.nodes:
-					state.nodes[node_id].name = op["new_name"]
-			elif action == "move_folder":
-				result = manager.move_folder(op["source_path"], op["target_parent"])
-				node_id = node_by_path(state, op["source_path"])
-				if node_id:
-					target_id = ensure_folder_path(state, op["target_parent"])
-					current_parent = state.nodes[node_id].parent
-					if current_parent and current_parent in state.nodes:
-						parent = state.nodes[current_parent]
-						if node_id in parent.children:
-							parent.children.remove(node_id)
-					state.nodes[node_id].parent = target_id
-					state.nodes[target_id].children.append(node_id)
-			elif action == "delete_file":
-				result = manager.delete_file(op["path"])
-				node_id = node_by_path(state, op["path"])
-				if node_id:
-					remove_node_recursive(state, node_id)
-			elif action == "rename_file":
-				result = manager.rename_file(op["path"], op["new_name"])
-				node_id = node_by_path(state, op["path"])
-				if node_id and node_id in state.nodes:
-					state.nodes[node_id].name = op["new_name"]
-			else:
-				raise HTTPException(status_code=400, detail=f"Unknown action: {action}")
-		except HTTPException:
-			raise
-		except Exception as exc:
-			raise http_error_from_exception(exc)
-		results.append(result)
-	save_state(state)
-	return {"results": results}
-

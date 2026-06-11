@@ -4,21 +4,15 @@ from pathlib import Path
 from uuid import UUID
 
 from fastapi import APIRouter, Body, HTTPException, Query
-from pydantic import BaseModel
 
-import json
-
+from ..schema.llm import ContentPayload, UserRulePayload
 from ..utils.llm import (
 	generate_description as llm_generate_description,
-	# generate_folder_name as llm_generate_folder_name,
 	generate_name as llm_generate_name,
-	# generate_structure as llm_generate_structure,
 	guess_file_pos as llm_generate_path
 )
 from .common import (
-	aggregate_text,
 	FILES_ROOT,
-	STATE_PATH,
 	get_node,
 	http_error_from_exception,
 	load_config,
@@ -32,21 +26,6 @@ from .common import (
 from ..utils.tree_builder import build_tree
 
 router = APIRouter(prefix="/llm", tags=["llm"])
-
-
-class ContentPayload(BaseModel):
-	content: str | None = None
-
-
-class UserRulePayload(BaseModel):
-	user_prompt: str | None = None
-
-
-def _tree_nodes_for_building(state) -> dict[str, dict]:
-	return {
-		node_id: node.model_dump(mode="json") if hasattr(node, "model_dump") else dict(node)
-		for node_id, node in state.nodes.items()
-	}
 
 
 @router.post("/generate/name")
@@ -87,6 +66,7 @@ def generate_description(id: UUID = Query(...)):
 	save_state(state)
 	return {"id": node_id, "description": node.summary}
 
+
 @router.get("/generate/path")
 def generate_path(id: UUID = Query(...)):
 	node_id = str(id)
@@ -95,7 +75,7 @@ def generate_path(id: UUID = Query(...)):
 	if node.type != "file":
 		raise HTTPException(status_code=400, detail="Node is not a file")
 
-	tree = "\n".join(build_tree(_tree_nodes_for_building(state), root_id(state)))
+	tree = "\n".join(build_tree(state.nodes, root_id(state)))
 	name = node.name
 	description = node.summary
 	print(description)
@@ -103,32 +83,6 @@ def generate_path(id: UUID = Query(...)):
 	new_path = llm_generate_path(tree, name, description)
 
 	return {"id": node_id, "path": new_path}
-
-
-# @router.post("/generate/folder-structure")
-# def generate_structure(payload: ContentPayload | None = Body(None)):
-# 	state = load_state()
-# 	content = payload.content if payload else None
-# 	if not content:
-# 		content = aggregate_text(state, root_id(state))
-# 	if not content:
-# 		raise HTTPException(status_code=400, detail="No content available for structure generation")
-# 	structure = llm_generate_structure(content)
-# 	return {"structure": structure}
-
-
-# @router.post("/generate/folder-name")
-# def generate_folder_name(id: UUID = Query(...)):
-# 	state = load_state()
-# 	node_id = str(id)
-# 	node = get_node(state, node_id)
-# 	if node.type != "folder":
-# 		raise HTTPException(status_code=400, detail="Node is not a folder")
-# 	content = aggregate_text(state, node_id)
-# 	if not content:
-# 		raise HTTPException(status_code=400, detail="No content available for folder name generation")
-# 	name = llm_generate_folder_name(content)
-# 	return {"id": node_id, "name": name}
 
 
 @router.get("/config")
