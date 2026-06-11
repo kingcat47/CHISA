@@ -8,7 +8,8 @@ from uuid import uuid4
 from fastapi import HTTPException
 
 from ..utils.file_reader import read_file
-from ..utils.system_manager import FileState, Node, load_file_state, save_file_state
+from ..schema.state import FileState, Node
+from ..utils.system_manager import load_file_state, save_file_state
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data"

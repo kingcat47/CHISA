@@ -91,61 +91,6 @@ def generate_description(content: str) -> str:
 	return parsed.get("description", "")
 
 
-# 엄엄엄엄엄엄엄엄엄엄엄엄엄엄엄엄엄엄엄엄
-# def generate_structure(content: str,) -> str:
-# 	command = """
-# 	당신은 문서의 구조(목차)를 생성합니다.
-# 	문서의 주요 섹션을 계층적으로 나열하고 JSON 배열로 출력하세요.
-
-# 	Key: Value 형식으로만 출력하세요.
-# 	반드시 아래 키를 사용하세요:
-# 	structure: JSON 형식의 목차
-# 	"""
-# 	config = _get_settings()
-# 	rule = config.get("structure_pattern") or ""
-
-# 	resp = _call_llm(command, rule, content)
-# 	parsed = parse_key_value(resp)
-# 	structure_text = parsed.get("structure", "[]")
-# 	try:
-# 		return json.loads(structure_text)
-# 	except Exception:
-# 		return structure_text
-
-
-# def generate_folder_name(content: str,) -> str:
-# 	command = """
-# 	당신은 파일의 폴더 이름을 생성합니다.
-# 	폴더 내부를 포괄하는 이름을 작성하세요.
-
-# 	Key: Value 형식으로만 출력하세요.
-# 	반드시 아래 키를 사용하세요:
-# 	title: 문서를 대표하는 제목
-# 	"""
-# 	config = _get_settings()
-# 	rule = config.get("folder_pattern") or ""
-	
-# 	resp = _call_llm(command, rule, content)
-# 	parsed = parse_key_value(resp)
-# 	return parsed.get("title", "")
-
-
-# def guess_rule(content: str,) -> str:
-# 	command = """
-# 	문서 내용을 분석하여 적합한 이름 규칙(name rule)을 한 단어로 추측하세요.
-
-# 	Key: Value 형식으로만 출력하세요.
-# 	반드시 아래 키를 사용하세요:
-# 	rule: 선택된 규칙 이름
-# 	"""
-# 	config = _get_settings()
-# 	rule_hint = config.get("name_pattern") or ""
-
-# 	resp = _call_llm(command, rule_hint, content)
-# 	parsed = parse_key_value(resp
-# 	return parsed.get("rule", "")
-
-
 def guess_file_pos(tree: str, file_name: str, description: str) -> str:
 	command = f"""
 	파일을 어느 폴더에 넣어야 하는지 판단하세요.
@@ -163,9 +108,10 @@ def guess_file_pos(tree: str, file_name: str, description: str) -> str:
 	print(f"confid:{confid}")
 
 	path = parsed.get("folder","").strip()
-	if path and not path.startswith("root/"):
+	if path and not path.startswith("root"): # 많이 위험해 보인다ㅏ
 		path = "root/" + path
 	return path
+
 
 
 if __name__ == "__main__":
@@ -193,7 +139,3 @@ if __name__ == "__main__":
 	result = build_tree(data["nodes"])
 	pos = guess_file_pos(result, content)
 	print(f"pos: {pos}")
-	
-
-
-
