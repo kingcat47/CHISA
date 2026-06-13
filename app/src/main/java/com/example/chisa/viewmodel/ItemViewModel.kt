@@ -128,6 +128,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _isImporting = MutableStateFlow(false)
     val isImporting: StateFlow<Boolean> = _isImporting.asStateFlow()
 
+    // ── 벚꽃 테마 상태 ────────────────────────────────────────────────────────
+    // true 이면 CHISATheme 에 SakuraColorScheme 이 적용된다.
+    // 설정 화면의 토글 스위치와 연동된다.
+    private val _isSakuraTheme = MutableStateFlow(false)
+    val isSakuraTheme: StateFlow<Boolean> = _isSakuraTheme.asStateFlow()
+
+    // ── 설정 화면 표시 여부 ───────────────────────────────────────────────────
+    // true 이면 SettingsScreen 이 전체 화면으로 표시된다.
+    private val _showSettings = MutableStateFlow(false)
+    val showSettings: StateFlow<Boolean> = _showSettings.asStateFlow()
+
     // ── ViewModel 초기화 ──────────────────────────────────────────────────────
     // 앱 시작(또는 프로세스 재시작) 시 내부 저장소를 스캔해 이전 세션 데이터를 복원한다.
     // init 블록은 ViewModel 인스턴스가 생성될 때 딱 한 번 실행된다.
@@ -341,6 +352,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             applyFilterAndSort()
         }
     }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // toggleSakuraTheme: 벚꽃 테마 on/off 를 전환한다.
+    // ──────────────────────────────────────────────────────────────────────────
+    fun toggleSakuraTheme() {
+        _isSakuraTheme.value = !_isSakuraTheme.value
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // openSettings / closeSettings: 설정 화면 표시 여부를 제어한다.
+    // ──────────────────────────────────────────────────────────────────────────
+    fun openSettings()  { _showSettings.value = true  }
+    fun closeSettings() { _showSettings.value = false }
 
     // ──────────────────────────────────────────────────────────────────────────
     // setFilter: 필터를 변경하고 목록을 갱신한다.
