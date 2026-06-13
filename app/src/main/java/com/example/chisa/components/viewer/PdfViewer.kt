@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -116,10 +117,15 @@ fun PdfViewer(
             .background(Color(0xFF1A1A1A))
     ) {
         // PDF 페이지 이미지
-        // 하단 네비게이션 바 높이만큼 패딩을 줘서 겹치지 않게 한다
-        bitmap?.let { bmp ->
+        // bitmap 이 null(렌더링 중)이면 스피너를 표시하고, 완료되면 페이지를 보여준다.
+        if (bitmap == null) {
+            CircularProgressIndicator(
+                color    = Color.White,
+                modifier = Modifier.align(Alignment.Center)
+            )
+        } else {
             Image(
-                bitmap             = bmp.asImageBitmap(),
+                bitmap             = bitmap!!.asImageBitmap(),
                 contentDescription = "PDF ${currentPage + 1}페이지",
                 contentScale       = ContentScale.Fit,
                 modifier           = Modifier
