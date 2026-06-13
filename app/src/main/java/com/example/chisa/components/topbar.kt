@@ -29,14 +29,16 @@ import androidx.compose.runtime.Composable
 //     BackHandler 와 동일한 goBack() 을 호출하므로 동작이 일치한다.
 //
 // Parameters:
-//   title       : TopBar 에 표시할 제목 (기본값 "CHISA")
-//   onBackClick : 뒤로가기 버튼 클릭 콜백. null 이면 버튼 미표시
+//   title          : TopBar 에 표시할 제목 (기본값 "CHISA")
+//   onBackClick    : 뒤로가기 버튼 클릭 콜백. null 이면 버튼 미표시
+//   onSettingsClick: 설정 아이콘 클릭 콜백. 설정 화면을 열 때 호출된다.
 // ──────────────────────────────────────────────────────────────────────────────
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ChisaTopBar(
-    title      : String        = "CHISA",
-    onBackClick: (() -> Unit)? = null
+    title          : String        = "CHISA",
+    onBackClick    : (() -> Unit)? = null,
+    onSettingsClick: () -> Unit    = {}
 ) {
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior(rememberTopAppBarState())
     TopAppBar(
@@ -56,7 +58,7 @@ fun ChisaTopBar(
             IconButton(onClick = { }) {
                 Icon(Icons.Default.Notifications, contentDescription = "알림")
             }
-            IconButton(onClick = { }) {
+            IconButton(onClick = onSettingsClick) {
                 Icon(Icons.Default.Settings, contentDescription = "설정")
             }
         },
