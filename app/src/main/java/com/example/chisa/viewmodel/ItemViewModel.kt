@@ -309,17 +309,29 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     //     현재 폴더 안에서 보이지 않게 되는 효과가 자연스럽게 발생한다.
     //
     //   @param item         이동할 GridItem
-    //   @param targetFolder 이동 대상 FolderItem
+    //   @param targetFolder 이동 대상 FolderItem. null 이면 루트(최상위)로 이동한다.
+    //                       루트 이동 시 filesDir/imports 를 대상 경로로 사용한다.
+    //                       loadSavedItems() 가 이 디렉토리를 스캔하므로
+    //                       앱 재시작 후에도 루트에 유지된다.
     // ──────────────────────────────────────────────────────────────────────────
-    fun moveItem(item: GridItem, targetFolder: FolderItem) {
+    fun moveItem(item: GridItem, targetFolder: FolderItem?) {
         viewModelScope.launch {
+            // targetFolder 가 null(루트 이동)이면 filesDir/imports 를 대상 경로로 사용한다
+            val resolvedFolder = targetFolder ?: FolderItem(
+                id       = "root",
+                name     = "imports",
+                date     = "",
+                path     = File(getApplication<Application>().filesDir, "imports").absolutePath,
+                metadata = "root"
+            )
+
             // 파일 시스템 이동 시도 (실패해도 UI 는 갱신한다)
-            moveItemUseCase(item, targetFolder)
+            moveItemUseCase(item, resolvedFolder)
 
             // in-memory 모델의 경로를 대상 폴더 기준으로 즉시 업데이트
             val newPath = when (item) {
-                is GridItem.Folder -> "${targetFolder.path}/${item.item.name}"
-                is GridItem.File   -> "${targetFolder.path}/${item.item.name}"
+                is GridItem.Folder -> "${resolvedFolder.path}/${item.item.name}"
+                is GridItem.File   -> "${resolvedFolder.path}/${item.item.name}"
             }
             val updated = when (item) {
                 is GridItem.Folder -> GridItem.Folder(item.item.copy(path = newPath))

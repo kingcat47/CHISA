@@ -59,7 +59,7 @@ fun FolderItem(
     onClick          : () -> Unit = {},
     onDelete         : () -> Unit = {},
     onRename         : (newName: String) -> Unit = {},
-    onMove           : (targetFolder: FolderItem) -> Unit = {},
+    onMove           : (targetFolder: FolderItem?) -> Unit = {},
     availableFolders : List<FolderItem> = emptyList()
 ) {
     // ── 드롭다운 / 다이얼로그 표시 상태 ──────────────────────────────────────
