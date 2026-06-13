@@ -31,7 +31,7 @@ import com.example.chisa.viewmodel.SortOrder
 //   onOpenFile        : 파일 아이콘 클릭 시 해당 FileItem 전달 콜백 (뷰어 열기)
 //   onDeleteItem      : 항목 삭제 확인 후 해당 GridItem 전달 콜백
 //   onRenameItem      : 이름 변경 확인 후 (GridItem, 새이름) 전달 콜백
-//   onMoveItem        : 이동 대상 선택 후 (GridItem, 대상FolderItem) 전달 콜백
+//   onMoveItem        : 이동 대상 선택 후 (GridItem, 대상FolderItem?) 전달 콜백 — null 이면 루트로 이동
 //   availableFolders  : 이동 다이얼로그에 표시할 폴더 목록 (ViewModel 에서 내려옴)
 // ──────────────────────────────────────────────────────────────────────────────
 @Composable
@@ -49,7 +49,7 @@ fun FolderGridItem(
     onOpenFile          : (FileItem) -> Unit = {},
     onDeleteItem     : (GridItem) -> Unit = {},
     onRenameItem     : (GridItem, String) -> Unit = { _, _ -> },
-    onMoveItem       : (GridItem, FolderItem) -> Unit = { _, _ -> },
+    onMoveItem       : (GridItem, FolderItem?) -> Unit = { _, _ -> },
     availableFolders : List<FolderItem> = emptyList()
 ) {
     Column(modifier = modifier) {

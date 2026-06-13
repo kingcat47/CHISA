@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
@@ -39,16 +40,19 @@ import com.example.chisa.model.FolderItem
 //   자기 자신을 목적지로 선택하는 경우를 방지하기 위해,
 //   호출부(FolderItem.kt)에서 자기 자신을 목록에서 미리 제거하고 전달한다.
 //
+//   목록 최상단에 "루트 (최상위)" 항목을 항상 표시해
+//   하위 폴더에 있는 항목을 루트로 올릴 수 있다.
+//
 // Parameters:
 //   availableFolders : 이동 가능한 폴더 목록 (ViewModel 의 allItems 에서 추출)
 //   onDismiss        : 취소 또는 외부 탭 시 호출
-//   onConfirm        : 폴더 선택 시 선택한 FolderItem 전달 — 실제 이동은 ViewModel 에서 수행
+//   onConfirm        : 폴더 선택 시 선택한 FolderItem? 전달 — null 이면 루트로 이동, 실제 이동은 ViewModel 에서 수행
 // ──────────────────────────────────────────────────────────────────────────────
 @Composable
 fun MoveItemDialog(
     availableFolders : List<FolderItem>,
     onDismiss        : () -> Unit,
-    onConfirm        : (targetFolder: FolderItem) -> Unit
+    onConfirm        : (targetFolder: FolderItem?) -> Unit
 ) {
     Dialog(
         onDismissRequest = onDismiss,
@@ -67,6 +71,34 @@ fun MoveItemDialog(
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
                 )
 
+                HorizontalDivider(color = Color(0xFFE5E7EB))
+
+                // ── 루트 이동 행 ──────────────────────────────────────────────
+                // 폴더 목록 최상단에 항상 표시한다.
+                // 하위 폴더에 있는 항목을 루트(최상위)로 꺼낼 때 사용한다.
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            onConfirm(null)
+                            onDismiss()
+                        }
+                        .padding(horizontal = 24.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector        = Icons.Default.Home,
+                        contentDescription = null,
+                        tint               = Color(0xFF374151),
+                        modifier           = Modifier.size(28.dp)
+                    )
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text(
+                        text     = "루트 (최상위)",
+                        fontSize = 14.sp,
+                        color    = Color(0xFF374151)
+                    )
+                }
                 HorizontalDivider(color = Color(0xFFE5E7EB))
 
                 if (availableFolders.isEmpty()) {
