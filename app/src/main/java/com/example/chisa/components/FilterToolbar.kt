@@ -18,6 +18,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -100,13 +101,13 @@ fun FilterToolbar(
                 Icon(
                     imageVector = Icons.Default.FilterList,
                     contentDescription = "콘텐츠 필터",
-                    tint = Color(0xFF374151)
+                    tint = MaterialTheme.colorScheme.onBackground
                 )
             }
             Text(
                 text = filterLabel,
                 fontSize = 13.sp,
-                color = Color(0xFF374151)
+                color = MaterialTheme.colorScheme.onBackground
             )
 
             // 필터 드롭다운 메뉴 (FilterList 아이콘 기준으로 표시)
@@ -129,7 +130,7 @@ fun FilterToolbar(
                 onClick = { addExpanded = true },
                 shape = RoundedCornerShape(8.dp),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 2.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF374151))
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
@@ -180,7 +181,7 @@ fun FilterToolbar(
                 Icon(
                     imageVector = Icons.Default.GridView,
                     contentDescription = "정렬 기준 선택",
-                    tint = Color(0xFF374151)
+                    tint = MaterialTheme.colorScheme.onBackground
                 )
             }
 
