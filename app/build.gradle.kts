@@ -40,6 +40,7 @@ android {
 }
 
 dependencies {
+    implementation("com.google.ai.edge.litertlm:litertlm-android:latest.release")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
@@ -52,6 +53,7 @@ dependencies {
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.documentfile)
     implementation(libs.coil.compose)
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
