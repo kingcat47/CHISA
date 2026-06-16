@@ -101,6 +101,7 @@ fun PdfViewer(
                 page.height * 2,
                 Bitmap.Config.ARGB_8888
             )
+            bmp.eraseColor(android.graphics.Color.WHITE)
             page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
 
             page.close()
