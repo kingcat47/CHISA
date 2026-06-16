@@ -17,3 +17,4 @@ local.properties
 /.idea/studiobot.xml
 .claude/settings.local.json
 TODO.txt
+LLM_INTEGRATION_PLAN.md
