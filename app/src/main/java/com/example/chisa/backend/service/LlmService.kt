@@ -1,6 +1,7 @@
 package com.example.chisa.backend.service
 
 import android.content.Context
+import android.util.Log
 import com.example.chisa.backend.model.ChisaConfig
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Contents
@@ -14,47 +15,57 @@ import java.io.File
 
 class LlmService(
     private val configFile: File,
-    private val context: Context          // Engine 초기화에 cacheDir 필요
+    private val context: Context
 ) {
-    // ──────────────────────────────────────────────
-    // Engine / Conversation 상태
-    // ──────────────────────────────────────────────
     private var engine: Engine? = null
 
-    /** 앱 시작 시(또는 필요한 시점에) 한 번만 호출 */
     suspend fun initEngine() = withContext(Dispatchers.IO) {
-        if (engine != null) return@withContext          // 이미 초기화됨
+        if (engine != null) {
+            Log.d("LlmService", "엔진 이미 초기화됨 - 건너뜀")
+            return@withContext
+        }
 
         val modelPath = ModelDownloader.getModelFile(context).absolutePath
-        val cacheDir  = context.cacheDir.path
+        Log.d("LlmService", "엔진 초기화 시작 | 모델 경로=$modelPath")
 
-        // ChatViewModel에서 동작하는 패턴 그대로 사용
         engine = try {
+            Log.d("LlmService", "GPU 백엔드 시도 중...")
             val gpuConfig = EngineConfig(
                 modelPath = modelPath,
                 backend   = Backend.GPU(),
                 cacheDir  = context.cacheDir.path
             )
-            Engine(gpuConfig).also { it.initialize() }
-        } catch (_: Exception) {
-            val cpuConfig = EngineConfig(
-                modelPath = modelPath,
-                backend   = Backend.CPU(),
-                cacheDir  = context.cacheDir.path
-            )
-            Engine(cpuConfig).also { it.initialize() }
+            Engine(gpuConfig).also {
+                it.initialize()
+                Log.d("LlmService", "GPU 백엔드 초기화 성공")
+            }
+        } catch (e: Exception) {
+            Log.w("LlmService", "GPU 초기화 실패 → CPU 폴백 시도 | 원인: ${e.message}")
+            try {
+                val cpuConfig = EngineConfig(
+                    modelPath = modelPath,
+                    backend   = Backend.CPU(),
+                    cacheDir  = context.cacheDir.path
+                )
+                Engine(cpuConfig).also {
+                    it.initialize()
+                    Log.d("LlmService", "CPU 백엔드 초기화 성공")
+                }
+            } catch (e2: Exception) {
+                Log.e("LlmService", "CPU 초기화도 실패", e2)
+                throw e2
+            }
         }
     }
 
     fun closeEngine() {
+        Log.d("LlmService", "엔진 종료")
         engine?.close()
         engine = null
     }
 
-    // ──────────────────────────────────────────────
-    // 공개 API (기존 시그니처 유지, suspend 추가)
-    // ──────────────────────────────────────────────
     suspend fun generateName(content: String): String {
+        Log.d("LlmService", "generateName 호출 | 입력 길이=${content.length}자")
         val command = """
             당신은 문서의 제목을 생성합니다.
             문서의 핵심 주제를 기반으로 짧고 명확한 제목을 작성하세요.
@@ -66,10 +77,13 @@ class LlmService(
 
         val rule = loadConfig().namePrompt.orEmpty()
         val resp = callLlm(command, rule, content)
-        return parseKeyValue(resp)["title"].orEmpty()
+        val result = parseKeyValue(resp)["title"].orEmpty()
+        Log.d("LlmService", "generateName 결과: '$result'")
+        return result
     }
 
     suspend fun generateDescription(content: String): String {
+        Log.d("LlmService", "generateDescription 호출 | 입력 길이=${content.length}자")
         val command = """
             당신은 문서의 핵심 내용을 1~2문장으로 요약합니다.
 
@@ -80,10 +94,13 @@ class LlmService(
 
         val rule = loadConfig().descriptionPrompt.orEmpty()
         val resp = callLlm(command, rule, content)
-        return parseKeyValue(resp)["description"].orEmpty()
+        val result = parseKeyValue(resp)["description"].orEmpty()
+        Log.d("LlmService", "generateDescription 결과: '$result'")
+        return result
     }
 
     suspend fun guessFilePos(tree: String, fileName: String, description: String): String {
+        Log.d("LlmService", "guessFilePos 호출 | 파일명=$fileName | 트리 길이=${tree.length}자")
         val command = """
             파일을 어느 폴더에 넣어야 하는지 판단하세요.
             반드시 기존 폴더 중 하나를 선택하세요
@@ -102,20 +119,21 @@ class LlmService(
         if (path.isNotEmpty() && !path.startsWith("root")) {
             path = "root/$path"
         }
+        Log.d("LlmService", "guessFilePos 결과: '$path' (confidence=${parsed["confidence"]})")
         return path
     }
 
-    // ──────────────────────────────────────────────
-    // 핵심: litertlm 엔진으로 교체된 callLlm
-    // ──────────────────────────────────────────────
     internal suspend fun callLlm(
         basePrompt: String,
         rule: String?,
         content: String
     ): String = withContext(Dispatchers.IO) {
+        Log.d("LlmService", "callLlm 시작 | 엔진 상태=${if (engine == null) "미초기화" else "초기화됨"}")
 
-        // 엔진이 아직 초기화되지 않았으면 자동 초기화
-        if (engine == null) initEngine()
+        if (engine == null) {
+            Log.d("LlmService", "엔진 미초기화 → initEngine() 호출")
+            initEngine()
+        }
 
         val fullPrompt = buildString {
             append(basePrompt.trim())
@@ -125,28 +143,30 @@ class LlmService(
             append("\n\nContent:\n").append(content)
             append("\n")
         }
+        Log.d("LlmService", "LLM 프롬프트 길이=${fullPrompt.length}자")
 
-        // 매 호출마다 1회성 Conversation 생성 (시스템 인스트럭션 없음)
         val convConfig = ConversationConfig(
             systemInstruction = Contents.of(basePrompt.trim())
         )
         val conversation = engine!!.createConversation(convConfig)
+        Log.d("LlmService", "Conversation 생성 완료 - 메시지 전송 시작")
 
         return@withContext try {
             val buffer = StringBuilder()
-            // 스트리밍 청크를 모아 전체 응답 문자열로 반환
             conversation.sendMessageAsync(fullPrompt).collect { chunk ->
                 buffer.append(chunk)
             }
-            buffer.toString().trim()
+            val result = buffer.toString().trim()
+            Log.d("LlmService", "LLM 응답 완료 | 응답 길이=${result.length}자 | 응답='$result'")
+            result
+        } catch (e: Exception) {
+            Log.e("LlmService", "LLM 응답 중 오류", e)
+            throw e
         } finally {
             conversation.close()
         }
     }
 
-    // ──────────────────────────────────────────────
-    // 유틸 (변경 없음)
-    // ──────────────────────────────────────────────
     internal fun parseKeyValue(text: String): Map<String, String> {
         val result = mutableMapOf<String, String>()
         for (rawLine in text.lines()) {
@@ -175,7 +195,6 @@ class LlmService(
                 structurePattern  = json.optString("structure_pattern", null),
                 folderMaxDepth    = json.optInt("folder_max_depth", 5),
                 folderNumbered    = json.optBoolean("folder_numbered", true),
-                // Ollama 설정은 더 이상 사용하지 않지만 ChisaConfig 호환성 유지
                 ollamaUrl         = json.optString("ollama_url", ""),
                 ollamaModel       = json.optString("ollama_model", ""),
                 maxPages          = json.optInt("max_pages", 5),

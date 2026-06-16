@@ -24,6 +24,7 @@ import com.example.chisa.usecase.ImportFolder
 import com.example.chisa.usecase.MoveItem
 import com.example.chisa.usecase.RenameItem
 import com.example.chisa.util.buildTextTree
+import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -51,10 +52,12 @@ sealed class ModelLoadState {
 //   ViewModel 이 결과를 _llmResult 에 저장하면 UI 가 구독해서 처리한다.
 // ──────────────────────────────────────────────────────────────────────────────
 sealed class LlmResult {
-    data class Name(val file: FileItem, val name: String)              : LlmResult()
-    data class Description(val file: FileItem, val description: String): LlmResult()
-    data class Position(val file: FileItem, val path: String)          : LlmResult()
-    data class Error(val message: String)                              : LlmResult()
+    data class Suggestion(
+        val file          : FileItem,
+        val suggestedName : String,
+        val suggestedPath : String   // LLM 이 반환한 경로 문자열 (예: "root/문서")
+    ) : LlmResult()
+    data class Error(val message: String) : LlmResult()
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -240,6 +243,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val newItem = importFileUseCase(uri)
             allItems = allItems + newItem
             applyFilterAndSort()
+            autoAnalyzeFile(newItem.item)
         }
     }
 
@@ -431,16 +435,42 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun clearLlmResult() { _llmResult.value = null }
 
     // ──────────────────────────────────────────────────────────────────────────
-    // generateName: 파일 내용을 읽어 LLM 으로 이름을 생성한다.
+    // autoAnalyzeFile (private)
+    //   파일 불러오기 직후 자동으로 호출된다.
+    //   지원 확장자(pdf/txt/docx)가 아니면 조용히 종료한다.
+    //   이름 생성 → 요약 → 위치 추천 순서로 LLM 을 호출하고
+    //   결과를 LlmResult.Suggestion 으로 발행한다.
     // ──────────────────────────────────────────────────────────────────────────
-    fun generateName(file: FileItem) {
+    private fun autoAnalyzeFile(file: FileItem) {
+        val ext = file.name.substringAfterLast('.', "").lowercase()
+        Log.d("MainViewModel", "autoAnalyzeFile 시작 | 파일=${file.name} | 확장자=$ext | 경로=${file.path}")
+        if (ext !in setOf("pdf", "txt", "docx")) {
+            Log.d("MainViewModel", "지원하지 않는 확장자 → LLM 분석 건너뜀")
+            return
+        }
+
         viewModelScope.launch {
             _isLlmProcessing.value = true
             _llmResult.value = try {
-                val name = generateNameUseCase(file)
-                LlmResult.Name(file, name)
+                Log.d("MainViewModel", "1단계: generateDescription 시작")
+                val description   = generateDescUseCase(file)
+                Log.d("MainViewModel", "1단계 완료 | description='$description'")
+
+                Log.d("MainViewModel", "2단계: generateName 시작")
+                val suggestedName = generateNameUseCase(file)
+                Log.d("MainViewModel", "2단계 완료 | suggestedName='$suggestedName'")
+
+                Log.d("MainViewModel", "3단계: buildTextTree + guessFilePosition 시작")
+                val folderTree    = buildTextTree(allItems)
+                Log.d("MainViewModel", "folderTree 길이=${folderTree.length}자")
+                val suggestedPath = guessFilePositionUseCase(file, description, folderTree)
+                Log.d("MainViewModel", "3단계 완료 | suggestedPath='$suggestedPath'")
+
+                Log.d("MainViewModel", "분석 완료 → Suggestion 발행")
+                LlmResult.Suggestion(file, suggestedName, suggestedPath)
             } catch (e: Exception) {
-                LlmResult.Error(e.message ?: "이름 생성 실패")
+                Log.e("MainViewModel", "autoAnalyzeFile 오류 | 파일=${file.name}", e)
+                LlmResult.Error(e.message ?: "AI 분석 실패")
             } finally {
                 _isLlmProcessing.value = false
             }
@@ -448,40 +478,55 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // ──────────────────────────────────────────────────────────────────────────
-    // generateDescription: 파일 내용을 읽어 LLM 으로 요약을 생성한다.
+    // applySuggestion
+    //   LlmSuggestionDialog 에서 사용자가 확인을 누르면 호출된다.
+    //   이름 변경 → 위치 이동 순서로 적용하고 결과를 초기화한다.
+    //
+    //   @param file          원본 FileItem
+    //   @param confirmedName 사용자가 최종 확정한 이름 (수정됐을 수 있음)
+    //   @param targetFolder  이동 대상 폴더. null 이면 이동 없음
     // ──────────────────────────────────────────────────────────────────────────
-    fun generateDescription(file: FileItem) {
+    fun applySuggestion(file: FileItem, confirmedName: String, targetFolder: FolderItem?) {
         viewModelScope.launch {
-            _isLlmProcessing.value = true
-            _llmResult.value = try {
-                val desc = generateDescUseCase(file)
-                LlmResult.Description(file, desc)
-            } catch (e: Exception) {
-                LlmResult.Error(e.message ?: "요약 생성 실패")
-            } finally {
-                _isLlmProcessing.value = false
+            var current: GridItem = GridItem.File(file)
+
+            if (confirmedName != file.name) {
+                renameItemUseCase(current, confirmedName)
+                val renamed = GridItem.File(file.copy(name = confirmedName))
+                allItems = allItems.map { if (it == current) renamed else it }
+                current  = renamed
             }
+
+            if (targetFolder != null) {
+                moveItemUseCase(current, targetFolder)
+                val newPath = "${targetFolder.path}/${(current as GridItem.File).item.name}"
+                val moved   = GridItem.File((current as GridItem.File).item.copy(path = newPath))
+                allItems    = allItems.map { if (it == current) moved else it }
+            }
+
+            applyFilterAndSort()
+            clearLlmResult()
         }
     }
 
     // ──────────────────────────────────────────────────────────────────────────
-    // guessFilePosition: 파일 요약과 현재 폴더 구조를 바탕으로 적절한 위치를 추천한다.
-    //   내부적으로 generateDescription → guessFilePos 순서로 호출한다.
+    // findFolderByLlmPath
+    //   LLM 이 반환한 경로 문자열 (예: "root/문서") 에서 마지막 세그먼트 이름으로
+    //   실제 FolderItem 을 찾아 반환한다.
+    //   매칭되는 폴더가 없거나 경로가 "root" 이면 null 을 반환한다.
     // ──────────────────────────────────────────────────────────────────────────
-    fun guessFilePosition(file: FileItem) {
-        viewModelScope.launch {
-            _isLlmProcessing.value = true
-            _llmResult.value = try {
-                val description = generateDescUseCase(file)
-                val folderTree  = buildTextTree(allItems)
-                val path        = guessFilePositionUseCase(file, description, folderTree)
-                LlmResult.Position(file, path)
-            } catch (e: Exception) {
-                LlmResult.Error(e.message ?: "위치 추천 실패")
-            } finally {
-                _isLlmProcessing.value = false
-            }
-        }
+    fun findFolderByLlmPath(llmPath: String): FolderItem? {
+        val segments = llmPath
+            .removePrefix("root")
+            .trim('/')
+            .split("/")
+            .filter { it.isNotEmpty() }
+        if (segments.isEmpty()) return null
+        val targetName = segments.last()
+        return allItems
+            .filterIsInstance<GridItem.Folder>()
+            .map { it.item }
+            .firstOrNull { it.name == targetName }
     }
 
     // ──────────────────────────────────────────────────────────────────────────

@@ -24,11 +24,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.chisa.components.ChisaTopBar
 import com.example.chisa.components.FolderGridItem
+import com.example.chisa.components.Popup.LlmSuggestionDialog
 import com.example.chisa.components.SakuraPetals
 import com.example.chisa.components.viewer.FileViewer
 import com.example.chisa.pages.ModelLoadingScreen
 import com.example.chisa.pages.SettingsScreen
 import com.example.chisa.ui.theme.CHISATheme
+import com.example.chisa.viewmodel.LlmResult
 import com.example.chisa.viewmodel.MainViewModel
 import com.example.chisa.viewmodel.ModelLoadState
 
@@ -41,17 +43,19 @@ class MainActivity : ComponentActivity() {
             val isSakuraTheme  by viewModel.isSakuraTheme.collectAsState()
 
             CHISATheme(isSakura = isSakuraTheme) {
-                val modelLoadState   by viewModel.modelLoadState.collectAsState()
-                val filteredItems    by viewModel.filteredItems.collectAsState()
-                val selectedFilter   by viewModel.selectedFilter.collectAsState()
-                val selectedSort     by viewModel.selectedSort.collectAsState()
-                val isLoading        by viewModel.isLoading.collectAsState()
-                val isImporting      by viewModel.isImporting.collectAsState()
-                val selectedFile     by viewModel.selectedFile.collectAsState()
-                val showSettings     by viewModel.showSettings.collectAsState()
-                val availableFolders by viewModel.availableFolders.collectAsState()
+                val modelLoadState    by viewModel.modelLoadState.collectAsState()
+                val filteredItems     by viewModel.filteredItems.collectAsState()
+                val selectedFilter    by viewModel.selectedFilter.collectAsState()
+                val selectedSort      by viewModel.selectedSort.collectAsState()
+                val isLoading         by viewModel.isLoading.collectAsState()
+                val isImporting       by viewModel.isImporting.collectAsState()
+                val selectedFile      by viewModel.selectedFile.collectAsState()
+                val showSettings      by viewModel.showSettings.collectAsState()
+                val availableFolders  by viewModel.availableFolders.collectAsState()
                 val currentFolderName by viewModel.currentFolderName.collectAsState()
-                val canGoBack        by viewModel.canGoBack.collectAsState()
+                val canGoBack         by viewModel.canGoBack.collectAsState()
+                val llmResult         by viewModel.llmResult.collectAsState()
+                val isLlmProcessing   by viewModel.isLlmProcessing.collectAsState()
 
                 // 런처는 항상 최상단에서 unconditional 하게 선언해야 한다 (Compose 규칙)
                 val filePickerLauncher = rememberLauncherForActivityResult(
@@ -164,6 +168,33 @@ class MainActivity : ComponentActivity() {
                                 onSakuraThemeToggle = { viewModel.toggleSakuraTheme() },
                                 onClose             = { viewModel.closeSettings() }
                             )
+                        }
+
+                        // LLM 분석 중 로딩 오버레이
+                        if (isLlmProcessing) {
+                            Box(
+                                modifier         = Modifier
+                                    .fillMaxSize()
+                                    .background(Color.Black.copy(alpha = 0.4f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(color = Color.White)
+                            }
+                        }
+
+                        // LLM 결과 다이얼로그
+                        when (val result = llmResult) {
+                            is LlmResult.Suggestion -> LlmSuggestionDialog(
+                                file             = result.file,
+                                suggestedName    = result.suggestedName,
+                                suggestedFolder  = viewModel.findFolderByLlmPath(result.suggestedPath),
+                                availableFolders = availableFolders,
+                                onConfirm        = { name, folder ->
+                                    viewModel.applySuggestion(result.file, name, folder)
+                                },
+                                onDismiss        = { viewModel.clearLlmResult() }
+                            )
+                            else -> {}
                         }
                     }
                 }
