@@ -1,5 +1,6 @@
 package com.example.chisa.backend.service
 
+import android.util.Log
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.text.PDFTextStripper
 import org.xmlpull.v1.XmlPullParser
@@ -11,24 +12,38 @@ import java.util.zip.ZipFile
 class FileReaderService {
 
     fun readFile(filePath: File, maxPages: Int = 5, maxChars: Int = 4000): String {
-        if (!filePath.exists()) throw java.io.FileNotFoundException("File not found: $filePath")
+        Log.d("FileReaderService", "readFile 시작 | 경로=${filePath.absolutePath} | 크기=${filePath.length()}bytes | 확장자=${filePath.extension}")
+        if (!filePath.exists()) {
+            Log.e("FileReaderService", "파일 없음: ${filePath.absolutePath}")
+            throw java.io.FileNotFoundException("File not found: $filePath")
+        }
 
         return when (filePath.extension.lowercase()) {
-            "pdf" -> readPdf(filePath, maxPages, maxChars)
+            "pdf"  -> readPdf(filePath, maxPages, maxChars)
             "docx" -> readDocx(filePath, maxChars)
-            "txt" -> readTxt(filePath, maxChars)
-            else -> throw UnsupportedOperationException("Unsupported file type: ${filePath.extension}")
+            "txt"  -> readTxt(filePath, maxChars)
+            else   -> {
+                Log.e("FileReaderService", "지원하지 않는 파일 형식: ${filePath.extension}")
+                throw UnsupportedOperationException("Unsupported file type: ${filePath.extension}")
+            }
         }
     }
 
     private fun readTxt(file: File, maxChars: Int): String {
-        return file.readText(charset = Charsets.UTF_8).take(maxChars).trim()
+        Log.d("FileReaderService", "TXT 읽기 시작: ${file.name}")
+        val result = file.readText(charset = Charsets.UTF_8).take(maxChars).trim()
+        Log.d("FileReaderService", "TXT 읽기 완료 | 추출 길이=${result.length}자")
+        return result
     }
 
     private fun readDocx(file: File, maxChars: Int): String {
+        Log.d("FileReaderService", "DOCX 읽기 시작: ${file.name}")
         val zip = ZipFile(file)
         val entry = zip.getEntry("word/document.xml")
-            ?: throw IllegalArgumentException("Invalid DOCX: no word/document.xml found")
+            ?: run {
+                Log.e("FileReaderService", "DOCX 파싱 실패: word/document.xml 없음")
+                throw IllegalArgumentException("Invalid DOCX: no word/document.xml found")
+            }
 
         val factory = XmlPullParserFactory.newInstance()
         val parser = factory.newPullParser()
@@ -63,16 +78,26 @@ class FileReaderService {
         }
 
         zip.close()
-        return parts.joinToString("\n\n").trim()
+        val result = parts.joinToString("\n\n").trim()
+        Log.d("FileReaderService", "DOCX 읽기 완료 | 추출 길이=${result.length}자")
+        return result
     }
 
     private fun readPdf(file: File, maxPages: Int, maxChars: Int): String {
+        Log.d("FileReaderService", "PDF 읽기 시작: ${file.name} | 크기=${file.length()}bytes")
         PDDocument.load(file).use { document ->
-            if (document.isEncrypted) return ""
+            Log.d("FileReaderService", "PDF 로드 완료 | 총 페이지=${document.numberOfPages} | 암호화=${document.isEncrypted}")
+            if (document.isEncrypted) {
+                Log.w("FileReaderService", "PDF 암호화되어 있어 텍스트 추출 불가")
+                return ""
+            }
             val stripper = PDFTextStripper()
             stripper.startPage = 1
             stripper.endPage = minOf(maxPages, document.numberOfPages)
-            return stripper.getText(document).take(maxChars).trim()
+            Log.d("FileReaderService", "PDF 텍스트 추출 시도 | 대상 페이지: 1~${stripper.endPage}")
+            val result = stripper.getText(document).take(maxChars).trim()
+            Log.d("FileReaderService", "PDF 텍스트 추출 완료 | 추출 길이=${result.length}자 | 미리보기='${result.take(100)}'")
+            return result
         }
     }
 }
