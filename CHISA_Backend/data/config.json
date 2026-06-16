@@ -1,0 +1,14 @@
+{
+  "user_prompt": "null",
+  "description_prompt": null,
+  "name_prompt": null,
+  "name_pattern": null,
+  "folder_pattern": null,
+  "structure_pattern": null,
+  "folder_max_depth": 5,
+  "folder_numbered": true,
+  "ollama_url": "http://localhost:11434/api/generate",
+  "ollama_model": "gemma4:e2b",
+  "max_pages": 5,
+  "max_chars": 4000
+}

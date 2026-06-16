@@ -11,6 +11,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.collectAsState
@@ -21,6 +24,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.chisa.components.ChisaTopBar
 import com.example.chisa.components.FolderGridItem
+import com.example.chisa.components.SakuraPetals
+import com.example.chisa.components.SettingsScreen
 import com.example.chisa.components.viewer.FileViewer
 import com.example.chisa.ui.theme.CHISATheme
 import com.example.chisa.viewmodel.MainViewModel
@@ -30,11 +35,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            CHISATheme {
-                // ViewModel 인스턴스 획득 (Activity 생명주기에 바인딩)
-                val viewModel: MainViewModel = viewModel()
+            // ViewModel 과 테마 상태는 CHISATheme 바깥에서 먼저 수집한다.
+            // CHISATheme(isSakura = ...) 에 값을 전달하려면 그보다 앞서 정의되어야 한다.
+            val viewModel: MainViewModel = viewModel()
+            val isSakuraTheme by viewModel.isSakuraTheme.collectAsState()
 
-                // 필터/정렬/로딩 상태 구독 — 값이 바뀔 때마다 UI 자동 재구성
+            CHISATheme(isSakura = isSakuraTheme) {
+                // 나머지 상태 구독 — 값이 바뀔 때마다 UI 자동 재구성
                 val filteredItems     by viewModel.filteredItems.collectAsState()
                 val selectedFilter   by viewModel.selectedFilter.collectAsState()
                 val selectedSort     by viewModel.selectedSort.collectAsState()
@@ -42,6 +49,7 @@ class MainActivity : ComponentActivity() {
                 val isImporting      by viewModel.isImporting.collectAsState()
                 // 현재 열려있는 파일 — null 이면 뷰어 닫힘, FileItem 이 있으면 FileViewer 표시
                 val selectedFile     by viewModel.selectedFile.collectAsState()
+                val showSettings    by viewModel.showSettings.collectAsState()
                 // 이동 다이얼로그에 표시할 폴더 목록 — ViewModel 이 allItems 기반으로 유지
                 val availableFolders by viewModel.availableFolders.collectAsState()
                 // TopBar 타이틀 — ViewModel 이 currentPath 기반으로 계산해 제공
@@ -81,12 +89,29 @@ class MainActivity : ComponentActivity() {
                 // FileViewer 가 TopBar 포함 전체 화면을 덮을 수 있도록
                 // Scaffold 와 FileViewer 를 같은 Box 안에 나란히 배치한다.
                 Box(modifier = Modifier.fillMaxSize()) {
+                    // 배경 이미지: 벚꽃 테마 활성화 시에만 표시한다.
+                    // painterResource 는 이미지를 통째로 메모리에 올려 OOM 위험이 있으므로
+                    // Coil 의 AsyncImage 를 사용한다. Coil 은 화면 크기에 맞게 자동 다운샘플링한다.
+                    // alpha 값(0.0 ~ 1.0)으로 투명도 조절 — 값이 작을수록 더 투명해진다.
+                    if (isSakuraTheme) {
+                        AsyncImage(
+                            model              = R.drawable.bg_chisa,
+                            contentDescription = null,
+                            contentScale       = ContentScale.Crop,
+                            modifier           = Modifier
+                                .fillMaxSize()
+                                .alpha(0.15f)
+                        )
+                    }
+
                     Scaffold(
-                        modifier = Modifier.fillMaxSize(),
+                        modifier       = Modifier.fillMaxSize(),
+                        containerColor = Color.Transparent, // 배경 이미지가 보이도록 투명 처리
                         topBar = {
                             ChisaTopBar(
-                                title = currentFolderName,
-                                onBackClick = if (canGoBack) {{ viewModel.goBack() }} else null
+                                title           = currentFolderName,
+                                onBackClick     = if (canGoBack) {{ viewModel.goBack() }} else null,
+                                onSettingsClick = { viewModel.openSettings() }
                             )
                         }
                     ) { innerPadding ->
@@ -135,11 +160,25 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
+                    // 벚꽃 꽃잎 애니메이션: 벚꽃 테마 활성화 시 전체 화면 위에 오버레이
+                    if (isSakuraTheme) {
+                        SakuraPetals()
+                    }
+
                     // FileViewer: Scaffold 와 같은 레벨에 배치해 TopBar 포함 전체 화면을 덮음
                     selectedFile?.let { file ->
                         FileViewer(
                             file    = file,
                             onClose = { viewModel.closeFile() }
+                        )
+                    }
+
+                    // SettingsScreen: FileViewer 와 동일하게 전체 화면 오버레이
+                    if (showSettings) {
+                        SettingsScreen(
+                            isSakuraTheme       = isSakuraTheme,
+                            onSakuraThemeToggle = { viewModel.toggleSakuraTheme() },
+                            onClose             = { viewModel.closeSettings() }
                         )
                     }
                 }
