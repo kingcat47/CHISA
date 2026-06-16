@@ -11,12 +11,19 @@ import com.example.chisa.model.GridItem
 import com.example.chisa.repository.StorageRepository
 import java.io.File
 import com.example.chisa.repository.StorageRepositoryImpl
+import com.example.chisa.backend.model.ChisaConfig
+import com.example.chisa.backend.service.FileReaderService
+import com.example.chisa.backend.service.LlmService
 import com.example.chisa.backend.service.ModelDownloader
 import com.example.chisa.usecase.DeleteItem
+import com.example.chisa.usecase.GenerateDescription
+import com.example.chisa.usecase.GenerateName
+import com.example.chisa.usecase.GuessFilePosition
 import com.example.chisa.usecase.ImportFile
 import com.example.chisa.usecase.ImportFolder
 import com.example.chisa.usecase.MoveItem
 import com.example.chisa.usecase.RenameItem
+import com.example.chisa.util.buildTextTree
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -37,6 +44,17 @@ sealed class ModelLoadState {
     ) : ModelLoadState()
     object Ready : ModelLoadState()
     data class Error(val message: String) : ModelLoadState()
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// LlmResult: LLM 작업 결과를 담는 sealed class
+//   ViewModel 이 결과를 _llmResult 에 저장하면 UI 가 구독해서 처리한다.
+// ──────────────────────────────────────────────────────────────────────────────
+sealed class LlmResult {
+    data class Name(val file: FileItem, val name: String)              : LlmResult()
+    data class Description(val file: FileItem, val description: String): LlmResult()
+    data class Position(val file: FileItem, val path: String)          : LlmResult()
+    data class Error(val message: String)                              : LlmResult()
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -83,14 +101,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: StorageRepository = StorageRepositoryImpl(application)
 
     // ── UseCase 인스턴스 ──────────────────────────────────────────────────────
-    // 각 UseCase 는 Repository 를 주입받아 단일 비즈니스 로직만 수행한다.
-    // ViewModel 이 직접 Repository 를 호출하지 않고 UseCase 를 통해 호출함으로써
-    // 책임을 분리하고 테스트 시 UseCase 단위로 mock 교체가 가능해진다.
     private val deleteItemUseCase   = DeleteItem(repository)
     private val renameItemUseCase   = RenameItem(repository)
     private val moveItemUseCase     = MoveItem(repository)
     private val importFileUseCase   = ImportFile(repository)
     private val importFolderUseCase = ImportFolder(repository)
+
+    // ── LLM UseCase 인스턴스 ─────────────────────────────────────────────────
+    private val llmService              = LlmService(File(application.filesDir, "chisa/config.json"), application)
+    private val fileReaderService       = FileReaderService()
+    private val llmConfig               = ChisaConfig()
+    private val generateNameUseCase     = GenerateName(llmService, fileReaderService, llmConfig)
+    private val generateDescUseCase     = GenerateDescription(llmService, fileReaderService, llmConfig)
+    private val guessFilePositionUseCase = GuessFilePosition(llmService)
 
     // 전체 원본 데이터
     private var allItems: List<GridItem> = emptyList()
@@ -142,6 +165,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     // importFolder() 실행 중에는 true 가 되어 UI 에서 로딩 오버레이를 표시한다.
     private val _isImporting = MutableStateFlow(false)
     val isImporting: StateFlow<Boolean> = _isImporting.asStateFlow()
+
+    // ── LLM 처리 상태 ────────────────────────────────────────────────────────
+    // true 이면 LLM 작업이 진행 중. UI 에서 로딩 표시에 사용.
+    private val _isLlmProcessing = MutableStateFlow(false)
+    val isLlmProcessing: StateFlow<Boolean> = _isLlmProcessing.asStateFlow()
+
+    // LLM 작업 결과 — null 이면 결과 없음, 값이 있으면 UI 에서 처리
+    private val _llmResult = MutableStateFlow<LlmResult?>(null)
+    val llmResult: StateFlow<LlmResult?> = _llmResult.asStateFlow()
 
     // ── 벚꽃 테마 상태 ────────────────────────────────────────────────────────
     // true 이면 CHISATheme 에 SakuraColorScheme 이 적용된다.
@@ -390,6 +422,65 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             allItems = allItems.map { if (it == item) updated else it }
             applyFilterAndSort()
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // clearLlmResult: LLM 결과를 초기화한다 (UI 에서 결과 처리 후 호출)
+    // ──────────────────────────────────────────────────────────────────────────
+    fun clearLlmResult() { _llmResult.value = null }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // generateName: 파일 내용을 읽어 LLM 으로 이름을 생성한다.
+    // ──────────────────────────────────────────────────────────────────────────
+    fun generateName(file: FileItem) {
+        viewModelScope.launch {
+            _isLlmProcessing.value = true
+            _llmResult.value = try {
+                val name = generateNameUseCase(file)
+                LlmResult.Name(file, name)
+            } catch (e: Exception) {
+                LlmResult.Error(e.message ?: "이름 생성 실패")
+            } finally {
+                _isLlmProcessing.value = false
+            }
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // generateDescription: 파일 내용을 읽어 LLM 으로 요약을 생성한다.
+    // ──────────────────────────────────────────────────────────────────────────
+    fun generateDescription(file: FileItem) {
+        viewModelScope.launch {
+            _isLlmProcessing.value = true
+            _llmResult.value = try {
+                val desc = generateDescUseCase(file)
+                LlmResult.Description(file, desc)
+            } catch (e: Exception) {
+                LlmResult.Error(e.message ?: "요약 생성 실패")
+            } finally {
+                _isLlmProcessing.value = false
+            }
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // guessFilePosition: 파일 요약과 현재 폴더 구조를 바탕으로 적절한 위치를 추천한다.
+    //   내부적으로 generateDescription → guessFilePos 순서로 호출한다.
+    // ──────────────────────────────────────────────────────────────────────────
+    fun guessFilePosition(file: FileItem) {
+        viewModelScope.launch {
+            _isLlmProcessing.value = true
+            _llmResult.value = try {
+                val description = generateDescUseCase(file)
+                val folderTree  = buildTextTree(allItems)
+                val path        = guessFilePositionUseCase(file, description, folderTree)
+                LlmResult.Position(file, path)
+            } catch (e: Exception) {
+                LlmResult.Error(e.message ?: "위치 추천 실패")
+            } finally {
+                _isLlmProcessing.value = false
+            }
         }
     }
 
