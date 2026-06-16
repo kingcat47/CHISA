@@ -112,7 +112,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // ── LLM UseCase 인스턴스 ─────────────────────────────────────────────────
     private val llmService              = LlmService(File(application.filesDir, "chisa/config.json"), application)
-    private val fileReaderService       = FileReaderService()
+    private val fileReaderService       = FileReaderService(application)
     private val llmConfig               = ChisaConfig()
     private val generateNameUseCase     = GenerateName(llmService, fileReaderService, llmConfig)
     private val generateDescUseCase     = GenerateDescription(llmService, fileReaderService, llmConfig)
