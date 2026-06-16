@@ -31,7 +31,7 @@ class ChisaBackend(context: Context) {
     private val systemManager = SystemManagerService()
     private val fileManager = FileManagerService(filesRoot.absolutePath)
     private val fileReader = FileReaderService()
-    private val llmService = LlmService(configFile)
+    private val llmService = LlmService(configFile, context)
     private val treeBuilder = TreeBuilderService()
 
     init {
@@ -226,7 +226,7 @@ class ChisaBackend(context: Context) {
     // LLM Operations (mapped from router/llm.py)
     // ========================================================================
 
-    fun generateName(nodeId: String): Map<String, Any> {
+    suspend fun generateName(nodeId: String): Map<String, Any> {
         val state = loadState()
         val node = getNode(state, nodeId)
         requireNodeType(node, "file")
@@ -251,7 +251,7 @@ class ChisaBackend(context: Context) {
         return mapOf("id" to nodeId, "name" to finalName)
     }
 
-    fun generateDescription(nodeId: String): Map<String, Any> {
+    suspend fun generateDescription(nodeId: String): Map<String, Any> {
         val state = loadState()
         val node = getNode(state, nodeId)
         requireNodeType(node, "file")
@@ -271,7 +271,7 @@ class ChisaBackend(context: Context) {
         return mapOf("id" to nodeId, "description" to summary)
     }
 
-    fun generatePath(nodeId: String): Map<String, Any> {
+    suspend fun generatePath(nodeId: String): Map<String, Any> {
         val state = loadState()
         val node = getNode(state, nodeId)
         requireNodeType(node, "file")
