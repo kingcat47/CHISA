@@ -1,6 +1,8 @@
 package com.example.chisa.backend.service
 
+import android.content.Context
 import android.util.Log
+import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.text.PDFTextStripper
 import org.xmlpull.v1.XmlPullParser
@@ -9,7 +11,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.util.zip.ZipFile
 
-class FileReaderService {
+class FileReaderService(private val context: Context) {
 
     fun readFile(filePath: File, maxPages: Int = 5, maxChars: Int = 4000): String {
         Log.d("FileReaderService", "readFile 시작 | 경로=${filePath.absolutePath} | 크기=${filePath.length()}bytes | 확장자=${filePath.extension}")
@@ -84,6 +86,7 @@ class FileReaderService {
     }
 
     private fun readPdf(file: File, maxPages: Int, maxChars: Int): String {
+        PDFBoxResourceLoader.init(context)
         Log.d("FileReaderService", "PDF 읽기 시작: ${file.name} | 크기=${file.length()}bytes")
         PDDocument.load(file).use { document ->
             Log.d("FileReaderService", "PDF 로드 완료 | 총 페이지=${document.numberOfPages} | 암호화=${document.isEncrypted}")
