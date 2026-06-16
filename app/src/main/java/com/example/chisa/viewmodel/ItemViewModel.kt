@@ -11,6 +11,7 @@ import com.example.chisa.model.GridItem
 import com.example.chisa.repository.StorageRepository
 import java.io.File
 import com.example.chisa.repository.StorageRepositoryImpl
+import com.example.chisa.backend.service.ModelDownloader
 import com.example.chisa.usecase.DeleteItem
 import com.example.chisa.usecase.ImportFile
 import com.example.chisa.usecase.ImportFolder
@@ -23,6 +24,20 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+
+// ──────────────────────────────────────────────────────────────────────────────
+// ModelLoadState: 앱 시작 시 모델 파일 준비 상태
+// ──────────────────────────────────────────────────────────────────────────────
+sealed class ModelLoadState {
+    object Checking : ModelLoadState()
+    data class Downloading(
+        val percent      : Int,
+        val downloadedMb : Float,
+        val totalMb      : Float
+    ) : ModelLoadState()
+    object Ready : ModelLoadState()
+    data class Error(val message: String) : ModelLoadState()
+}
 
 // ──────────────────────────────────────────────────────────────────────────────
 // ContentFilter: 화면에 표시할 항목 종류를 결정하는 필터
@@ -139,15 +154,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _showSettings = MutableStateFlow(false)
     val showSettings: StateFlow<Boolean> = _showSettings.asStateFlow()
 
+    // ── 모델 로딩 상태 ────────────────────────────────────────────────────────
+    // 앱 시작 시 모델 파일 존재 여부 확인 → 없으면 다운로드 → Ready
+    private val _modelLoadState = MutableStateFlow<ModelLoadState>(ModelLoadState.Checking)
+    val modelLoadState: StateFlow<ModelLoadState> = _modelLoadState.asStateFlow()
+
     // ── ViewModel 초기화 ──────────────────────────────────────────────────────
-    // 앱 시작(또는 프로세스 재시작) 시 내부 저장소를 스캔해 이전 세션 데이터를 복원한다.
-    // init 블록은 ViewModel 인스턴스가 생성될 때 딱 한 번 실행된다.
     init {
+        startModelSetup()
         viewModelScope.launch {
             _isLoading.value = true
             allItems = repository.loadSavedItems()
             applyFilterAndSort()
             _isLoading.value = false
+        }
+    }
+
+    fun startModelSetup() {
+        viewModelScope.launch {
+            _modelLoadState.value = ModelLoadState.Checking
+            if (ModelDownloader.isModelDownloaded(getApplication())) {
+                _modelLoadState.value = ModelLoadState.Ready
+            } else {
+                ModelDownloader.downloadModel(getApplication()).collect { state ->
+                    when (state) {
+                        is ModelDownloader.DownloadState.Progress -> _modelLoadState.value = ModelLoadState.Downloading(
+                            percent      = state.percent,
+                            downloadedMb = state.downloadedMb,
+                            totalMb      = state.totalMb
+                        )
+                        ModelDownloader.DownloadState.Done        -> _modelLoadState.value = ModelLoadState.Ready
+                        is ModelDownloader.DownloadState.Error    -> _modelLoadState.value = ModelLoadState.Error(state.message)
+                    }
+                }
+            }
         }
     }
 
