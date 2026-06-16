@@ -1,0 +1,61 @@
+{
+  "nodes": {
+    "root": {
+      "name": "root",
+      "type": "folder",
+      "parent": null,
+      "children": [
+        "dd12fa20-6760-436e-b398-a5cdf5c7e9b8",
+        "06930619-0017-48d6-8a7e-45092bc342be",
+        "bb6a2f7b-57aa-4c85-b933-b595fe23da02"
+      ],
+      "summary": null,
+      "content": null
+    },
+    "dd12fa20-6760-436e-b398-a5cdf5c7e9b8": {
+      "name": "CHISA 시스템: Operation Orchestrator 기반 파일 구조 자동 재설계 및 관리.pdf",
+      "type": "file",
+      "parent": "root",
+      "children": [],
+      "summary": "CHISA 시스템은 Operation Orchestrator, 적합도 산출 체계, Snapshot 기반 롤백 기능을 통해 파일 구조 변경 작업을 지능적이고 안전하게 처리하도록 재설계된 시스템입니다. 이 시스템은 변화 감지, 패턴 분석, 그리고 사용자 승인 절차를 결합하여 파일 이름 변경 및 이동 등의 복잡한 작업을 효율적으로 수행합니다.",
+      "content": "CHISA 시스템  설계 FRIDAY, MAY 29 2026\n개선된  프로젝트흐름도  v2\n기존  흐름도의  8 가지  구조적  문제를  해결한  전체  재설계안 . Operation Orchestrator 레이어  신설 , 적합도  산출  체계  정\n의 , 롤백 / 에러  핸들링  추가 , 거부  처리  통일 , 배치  처리  로직  도입으로  구현  가능한  수준의  완성도를  확보했습니다 .\nPhase 0. 변화  감지  및  수집\n0-1. 변화  감지 file_version → file.json 의  버전  숫자  변화를  감지한다 .\n0-2. 패턴  분석 세  가지  패턴을  분석하여  config.json 에  저장한다 .\n패턴 형식 예시\nname_pattern < 연도 >_< 이름 >.pdf\n2024_\n중간고\n사 .pdf\nfolder_pattern < 인덱스 >_< 내부내용 >01_ 수\n학\nstructure_pattern<1level>/<2level>/<3level>/<4level>\n< 주제\n>/< 과\n목 >/<\n분야\n>/< 연\n도 >\n0-3. 컨텍스트  수집 변화  항목의  주변  구조를  수집하여  모델  입력을  구성한다 .\n트리거\nsystem_manager.py 가  변화된  항목  목록을  반환 : {file_id, \nchange_type, timestamp}\nchange_type: create, modify, rename, move, delete\n동시  다발적  변경  시 : 모든  변경  이벤트를  change_batch[]에  수집한  뒤  일괄\n전달\n설정\n신규\n기본 : 상위 · 하위  1 레벨  구조\n수집  항목 : 파일명 , 메타데이터 , sibling 목록 , parent 경로 ,\nstructure_pattern 상  현재  위치\n\nI. Operation Orchestrator\n1. Operation 선택 모델이  후보  operation 목록을  반환하면 , Orchestrator 가  실행  계획을  수립\n한다 .\n2. 의존성  그래프 Operation 간  의존 · 충돌  관계를  그래프로  표현한다 .\n관계 규칙 예시\n선행  의존 A 의  결과가  B 의  입력에  영향 이름변경 (1) → 이동 (3)\n상호  배타 같은  대상에  대해  동시  불가 폴더  삭제 (6) ↔ 폴더  분할 (7)\n독립 서로  다른  대상 , 병렬  가능 파일 A 이름변경  ∥  파일 B 이동\n3. 배치  처리 동시  다발적  변경을  효율적으로  처리한다 .\n4. Operation 분류  기준 경계가  모호한  케이스를  해소하는  분류  규칙이다 .\n상황 판정  규칙 결과\n폴더  내  파일\n1 개 파일이  상위  폴더에  합류  가능하면 → 삭제 (6)\n폴더  내  파일\n1 개 sibling 폴더와  유사도  > 0.8 이면 → 병합 (8)\n하위  구조  불\n균형 특정  폴더만  깊이  > avg + 1 이면 → 분할 (7)\n하위  구조  불\n균형\n전체  level 구조가  pattern 에  부합하지  않\n으면\n→ 재구\n성 (9)\n유사  이름\nsibling\nnaming similarity > 0.9 + 내용  유사도\n> 0.7 이면 → 병합 (8)\n유사  이름\nsibling\nnaming similarity > 0.9 이지만  내용  상\n이하면\n→ 이름변\n경 (2)\n핵심  신규\n모델  응답  형식 : [{op_type, target, confidence, reason}]\nconfidence 0.7 미만인  operation 은  자동  제외  (low-\nconfidence filter)\n남은  후보를  confidence 내림차순  정렬\n핵심  신규\n상호  배타  충돌  시 : confidence 가  높은  operation 선택 , 나머지  대기열로\n선행  의존  시 : 위상  정렬 (topological sort) 로  실행  순서  결정\n핵심  신규\nchange_batch 내  변경  항목을  대상별로  그룹핑\n같은  폴더  내  변경은  하나의  operation set 으로  묶음\n독립  그룹은  병렬  파이프라인으로  처리\n사용자에게는  그룹  단위로  승인  요청  ( 건별  승인  / 일괄  승인  선택  가능 )\n핵심  신규\n\nII. 적합도 (Fitness) 산출  체계\n1. 점수  구성 0~1 범위의  가중합으로  적합도를  산출한다 .\n요소 가중\n치 산출  방법\nnaming_score 0.25 name_pattern 과의  정규식  일치율\nstructure_score 0.30 structure_pattern 상  현재  위치의  level\n적합  여부\nsemantic_score 0.25 파일  내용 / 메타데이터와  폴더  주제의\nembedding 유사도\nconsistency_score0.20 sibling 간  naming·depth 일관성\nfitness = Σ( 요소  × 가중치 )\n2. Threshold 기준 적합도  차이가  action threshold 를  넘어야  operation 을  제안한다 .\nOPERATION 유형 ACTION\nTHRESHOLD 의미\n이름변경  (1, 2) Δ ≥ 0.3 현재  이름  대비  개선폭이\n30% 이상\n이동  (3, 4) Δ ≥ 0.25 후보  위치의  fitness 가\n25%p 이상  높음\n생성 / 삭제 / 분할 / 병\n합  (5~8) Δ ≥ 0.35구조  변경의  비용이  크므로  높\n은  기준  적용\n재구성 / 축변경\n(9, 10) Δ ≥ 0.4 전체  구조  영향이  크므로  가장\n높은  기준\n사용자가  반복  거부한  유형은  threshold 를  +0.1 씩  상향  (preference 학습 )\nIII. 롤백  및  에러  핸들링\n1. Snapshot 기반  롤백 모든  operation 실행  전에  영향  범위의  구조  snapshot 을  저장한다 .\n2. 에러  분류  및  대응 파일시스템  에러를  3 단계로  분류하고  각각  대응한다 .\n신규\nsnapshot 저장  항목 : 파일  경로 , 파일명 , 폴더  구조 ,\nmetadata, timestamp\n저장  위치 : .chisa/snapshots/{operation_id}.json\n보존  기간 : 최근  50 개  operation 또는  7 일  ( 먼저  도달하는  기준 )\nUndo 명령  시 : snapshot 기반으로  파일 / 폴더를  원래  상태로  복원\n복합  operation(10 번  등 ) 은  단계별  중간  snapshot 도  저장\n신규\n\n등\n급 에러  유형 대응\n경\n고\n파일  잠금 , 일시적  접근\n불가\n3 회  재시도  → 실패  시  해당  파일  skip, 나\n머지  진행\n중\n단\n권한  부족 , 디스크  공간\n부족\n현재  operation 즉시  중단 , snapshot\n롤백 , 사용자  알림\n치\n명\n구조  무결성  깨짐 ,\nsnapshot 손상\n전체  배치  중단 , 마지막  정상  snapshot 으\n로  복원 , 로그  생성\nIV. Operation 상세  ( 이름변경 )\nOp 1. 파일  이름  변경 타깃  파일의  이름을  name_pattern 에  맞춘다 .\nOp 2. 폴더  이름  변경 타깃  폴더의  이름을  folder_pattern 에  맞춘다 .\nV. Operation 상세  ( 이동 )\nOp 3. 파일  이동 타깃  파일을  structure_pattern 기준  최적  위치로  이동한다 .\n모든  에러는  .chisa/logs/error_{timestamp}.log에  기록\noperation 실행  후  post-validation: 변경된  구조의  fitness 재계산  → 이\n전보다  하락  시  자동  롤백\n개선\n현재  파일명  파싱  → name_pattern 과  비교  → naming_score 산출\nnaming_score ≥ 0.7 → end ( 충분히  적합 )\nnaming_score < 0.7 → name_pattern 에  맞게  파일명  조합\n충돌  시  _n 접미사  추가\n사용자  승인  요청\n확인  → snapshot 저장  → 변경  실행  → post-validation\n거부  → 현재"
+    },
+    "06930619-0017-48d6-8a7e-45092bc342be": {
+      "name": "급식리스트",
+      "type": "folder",
+      "parent": "root",
+      "children": [
+        "a28c2637-05ff-4a76-a5eb-519acc69de5a"
+      ],
+      "summary": null,
+      "content": null
+    },
+    "bb6a2f7b-57aa-4c85-b933-b595fe23da02": {
+      "name": "프로젝트",
+      "type": "folder",
+      "parent": "root",
+      "children": [
+        "2c3d540b-3e53-4c89-9d0a-5f58f60114fe"
+      ],
+      "summary": null,
+      "content": null
+    },
+    "a28c2637-05ff-4a76-a5eb-519acc69de5a": {
+      "name": "스시초밥",
+      "type": "folder",
+      "parent": "06930619-0017-48d6-8a7e-45092bc342be",
+      "children": [],
+      "summary": null,
+      "content": null
+    },
+    "2c3d540b-3e53-4c89-9d0a-5f58f60114fe": {
+      "name": "연구1",
+      "type": "folder",
+      "parent": "bb6a2f7b-57aa-4c85-b933-b595fe23da02",
+      "children": [],
+      "summary": null,
+      "content": null
+    }
+  },
+  "file_version": 1
+}
