@@ -491,17 +491,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             var current: GridItem = GridItem.File(file)
 
             if (confirmedName != file.name) {
-                renameItemUseCase(current, confirmedName)
-                val renamed = GridItem.File(file.copy(name = confirmedName))
+                val renamed = renameItemUseCase(current, confirmedName)
                 allItems = allItems.map { if (it == current) renamed else it }
                 current  = renamed
             }
 
             if (targetFolder != null) {
-                moveItemUseCase(current, targetFolder)
-                val newPath = "${targetFolder.path}/${(current as GridItem.File).item.name}"
-                val moved   = GridItem.File((current as GridItem.File).item.copy(path = newPath))
-                allItems    = allItems.map { if (it == current) moved else it }
+                val moved = moveItemUseCase(current, targetFolder)
+                allItems  = allItems.map { if (it == current) moved else it }
             }
 
             applyFilterAndSort()
