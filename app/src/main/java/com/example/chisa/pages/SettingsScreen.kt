@@ -1,4 +1,4 @@
-package com.example.chisa.components
+package com.example.chisa.pages
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -24,19 +24,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// ──────────────────────────────────────────────────────────────────────────────
-// SettingsScreen
-//   설정 화면 전체를 구성하는 컴포넌트.
-//   FileViewer 와 동일하게 Scaffold 위에 오버레이로 띄워져 전체 화면을 덮는다.
-//
-//   현재 제공하는 설정 항목:
-//     - 벚꽃 테마: on/off 스위치. CHISATheme 의 isSakura 파라미터와 연동된다.
-//
-// Parameters:
-//   isSakuraTheme       : 현재 벚꽃 테마 활성화 여부
-//   onSakuraThemeToggle : 스위치 클릭 시 ViewModel 의 toggleSakuraTheme() 호출
-//   onClose             : 뒤로가기 버튼 클릭 시 설정 화면을 닫는다
-// ──────────────────────────────────────────────────────────────────────────────
 @Composable
 fun SettingsScreen(
     isSakuraTheme      : Boolean,
@@ -78,7 +65,6 @@ fun SettingsScreen(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
             )
 
-            // 벚꽃 테마 토글 행
             Row(
                 modifier          = Modifier
                     .fillMaxWidth()
